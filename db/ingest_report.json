@@ -1,26 +1,11 @@
 {
-  "run_id": "2026-05-10T19:51:49Z",
+  "run_id": "2026-05-10T23:10:30Z",
   "groups": {
-    "nara_ndc": {
-      "status": "ok",
-      "records": 11379,
-      "artifacts": 34,
-      "new_artifacts": 0
-    },
-    "nara_catalog": {
-      "status": "ok",
-      "records": 0,
-      "artifacts": 0,
-      "new_artifacts": 0
-    },
     "aaro": {
       "status": "error",
       "error": "403 Client Error: Forbidden for url: https://www.aaro.mil/Cases-and-Reports/"
-    },
-    "dow_uap": {
-      "status": "skipped_no_parser"
     }
   },
-  "total_records": 11379,
+  "total_records": 0,
   "new_artifacts": {}
 }

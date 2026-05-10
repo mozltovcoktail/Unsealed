@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS records (
   id                  INTEGER PRIMARY KEY,
   title               TEXT NOT NULL,
   agency              TEXT NOT NULL,             -- 'NARA' | 'CIA' | 'NASA' | 'DoW' | 'AARO' | ...
-  unsealed_date       TEXT NOT NULL,             -- ISO 8601 'YYYY-MM-DD' (D1 has no DATE type)
+  unsealed_date       TEXT,                      -- ISO 8601 'YYYY-MM-DD' (D1 has no DATE type). Nullable: many real-world records have no discoverable release date.
   collection_id       TEXT,                      -- e.g. 'RG 263', 'JFK Assassination Records'
   source_url          TEXT NOT NULL,
   description         TEXT,                      -- often present in NDC release lists

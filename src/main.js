@@ -25,6 +25,7 @@ const recordCountEl = $('#recordCount');
 const state = {
   query: '',
   sourceFilter: null, // null = all sources
+  includeSealed: false, // show NDC IOD-candidate entries (not yet declassified)
   sources: [],        // [{id,label,sublabel}, ...]
   responseSources: [],
 };
@@ -51,6 +52,7 @@ async function runSearch() {
 
   const params = new URLSearchParams({ q: state.query, limit: '12' });
   if (state.sourceFilter) params.set('source', state.sourceFilter);
+  if (state.includeSealed) params.set('include_sealed', '1');
 
   try {
     const r = await fetch(`/api/search?${params}`, { signal: inflightCtrl.signal });
@@ -127,6 +129,7 @@ function buildSourceSection(src) {
 function buildRecord(rec) {
   const el = document.createElement('article');
   el.className = 'record';
+  if (rec.is_sealed) el.classList.add('is-sealed');
   el.dataset.id = rec.id;
 
   const thumbWrap = document.createElement('div');
@@ -146,8 +149,9 @@ function buildRecord(rec) {
   meta.className = 'record__meta';
   // Filter null/undefined — Element.append(null) stringifies to "null".
   const metaPills = [
+    rec.is_sealed ? span('SEALED', 'record__pill--sealed') : null,
     span(rec.agency || 'UNKNOWN'),
-    span(rec.unsealed_date),
+    span(rec.is_sealed ? 'NOT YET UNSEALED' : rec.unsealed_date),
     span(rec.collection_id),
   ].filter(Boolean);
   meta.append(...metaPills);
@@ -196,10 +200,11 @@ function stripPrefix(id) {
   return i === -1 ? id : String(id).slice(i + 1);
 }
 
-function span(text) {
+function span(text, className) {
   if (!text) return null;
   const s = document.createElement('span');
   s.textContent = text;
+  if (className) s.className = className;
   return s;
 }
 
@@ -264,6 +269,28 @@ function renderSourceToggles() {
     });
     sourcesEl.appendChild(btn);
   }
+
+  // "+ SEALED" toggle — different axis of filter than source. Visually
+  // marked apart with the agency--sealed modifier.
+  const sealedBtn = document.createElement('button');
+  sealedBtn.type = 'button';
+  sealedBtn.className = 'agency agency--sealed';
+  sealedBtn.setAttribute('aria-pressed', state.includeSealed ? 'true' : 'false');
+  const sealedLamp = document.createElement('span');
+  sealedLamp.className = 'agency__lamp';
+  const sealedLabel = document.createElement('span');
+  sealedLabel.textContent = '+ SEALED';
+  const sealedSub = document.createElement('span');
+  sealedSub.className = 'agency__count';
+  sealedSub.textContent = 'CANDIDATES';
+  sealedBtn.append(sealedLamp, sealedLabel, sealedSub);
+  sealedBtn.title = 'Include records proposed for declassification but not yet released (NDC IOD candidates).';
+  sealedBtn.addEventListener('click', () => {
+    state.includeSealed = !state.includeSealed;
+    renderSourceToggles();
+    runSearch();
+  });
+  sourcesEl.appendChild(sealedBtn);
 }
 
 loadSources();
@@ -358,6 +385,7 @@ function loadingNode() {
 function buildFallbackCard(info) {
   const card = document.createElement('div');
   card.className = 'viewer__fallback';
+  if (info.is_sealed) card.classList.add('is-sealed');
 
   const reasonText =
     info.reason === 'x-frame-options'
@@ -370,11 +398,13 @@ function buildFallbackCard(info) {
 
   const dl = document.createElement('dl');
   dl.className = 'viewer__meta';
-  for (const [k, v] of [
+  const metaPairs = [
+    info.is_sealed ? ['STATUS', 'SEALED — PROPOSED FOR DECLASSIFICATION, NOT YET RELEASED'] : null,
     ['AGENCY', info.agency],
-    ['UNSEALED', info.unsealed_date],
+    [info.is_sealed ? 'CANDIDATE LIST DATE' : 'UNSEALED', info.unsealed_date],
     ['COLLECTION', info.collection_id],
-  ]) {
+  ].filter(Boolean);
+  for (const [k, v] of metaPairs) {
     if (!v) continue;
     const dt = document.createElement('dt'); dt.textContent = k;
     const dd = document.createElement('dd'); dd.textContent = v;

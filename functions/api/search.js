@@ -16,6 +16,7 @@ export const onRequestGet = async ({ request, env }) => {
   const url = new URL(request.url);
   const q = (url.searchParams.get('q') || '').trim();
   const filter = url.searchParams.get('source'); // null = all sources
+  const includeSealed = url.searchParams.get('include_sealed') === '1';
   const limit = Math.min(
     parseInt(url.searchParams.get('limit') || String(PER_SOURCE_LIMIT_DEFAULT), 10),
     50,
@@ -26,7 +27,7 @@ export const onRequestGet = async ({ request, env }) => {
   const all = [
     { id: 'ia',      run: () => fetchInternetArchive(q, limit) },
     { id: 'ntrs',    run: () => fetchNTRS(q, limit) },
-    { id: 'curated', run: () => fetchCurated(q, limit, env) },
+    { id: 'curated', run: () => fetchCurated(q, limit, env, { includeSealed }) },
   ];
   const wanted = filter ? all.filter((s) => s.id === filter) : all;
 
@@ -133,18 +134,22 @@ async function fetchNTRS(q, limit) {
 }
 
 // ─── Curated (D1 FTS5) ─────────────────────────────────────────────────
-async function fetchCurated(q, limit, env) {
+async function fetchCurated(q, limit, env, { includeSealed = false } = {}) {
   const ftsQuery = toFtsQuery(q);
   if (!ftsQuery) {
     return { id: 'curated', name: SOURCE_LABEL.curated, total: 0, results: [] };
   }
+  // is_sealed=1 records are NDC IOD-candidate entries — proposed for declass
+  // but not actually released. Hidden by default; the UI exposes a toggle
+  // that flips include_sealed=1.
+  const sealedFilter = includeSealed ? '' : 'AND r.is_sealed = 0';
   const sql = `
     SELECT r.id, r.title, r.agency, r.unsealed_date, r.collection_id,
-           r.source_url, r.description, r.thumbnail_url,
+           r.source_url, r.description, r.thumbnail_url, r.is_sealed,
            bm25(records_fts, 3.0, 1.0, 0.5) AS rank
     FROM records_fts
     JOIN records r ON r.id = records_fts.rowid
-    WHERE records_fts MATCH ?1
+    WHERE records_fts MATCH ?1 ${sealedFilter}
     ORDER BY rank
     LIMIT ?2
   `;
@@ -162,6 +167,7 @@ async function fetchCurated(q, limit, env) {
       source_url: r.source_url,
       description: r.description,
       thumbnail_url: r.thumbnail_url,
+      is_sealed: r.is_sealed === 1,
     })),
   };
 }

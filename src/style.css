@@ -126,6 +126,23 @@ a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
   font-size: 10px;
   opacity: 0.7;
 }
+/* "+ SEALED" toggle — different axis of filter (CANDIDATES, not source).
+   Marked apart with a left-edge thicker rule and a hatched lamp so it
+   reads as orthogonal to the source filters. */
+.agency--sealed {
+  border-left: var(--rule-thick);
+}
+.agency--sealed .agency__lamp {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      var(--ink) 0 2px,
+      var(--paper) 2px 4px
+    );
+}
+.agency--sealed[aria-pressed="true"] .agency__lamp {
+  background: var(--paper);
+}
 
 /* ─── Results ──────────────────────────────────────────────────── */
 .results { padding: 16px; display: flex; flex-direction: column; gap: 28px; }
@@ -188,6 +205,27 @@ a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
   margin-bottom: 6px;
 }
 .record__meta span { border: var(--rule); padding: 2px 6px; }
+
+/* SEALED pill — inverted to read as a warning stamp. The CANDIDATES
+   axis (is_sealed=1) means "indexed but not yet declassified". */
+.record__pill--sealed {
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+  letter-spacing: 0.22em;
+}
+/* Sealed records get a diagonal-stripe border accent so they're
+   distinguishable in a list without being so loud they overpower
+   actually-unsealed entries. */
+.record.is-sealed {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      transparent 0 8px,
+      rgba(0, 0, 0, 0.04) 8px 9px
+    ),
+    var(--paper);
+}
 .record__title {
   font-family: var(--sans);
   font-weight: 800;

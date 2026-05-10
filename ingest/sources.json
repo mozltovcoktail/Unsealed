@@ -109,8 +109,11 @@
   "aaro": {
     "agency": "AARO",
     "collection_id_default": "AARO Public Releases",
+    "_note": "aaro.mil is behind Akamai with JA3 TLS fingerprinting — vanilla requests gets 403. impersonate=chrome routes fetches through curl_cffi.",
+    "impersonate": "chrome",
     "urls": [
-      "https://www.aaro.mil/Cases-and-Reports/"
+      "https://www.aaro.mil/UAP-Cases/UAP-Case-Resolution-Reports/",
+      "https://www.aaro.mil/UAP-Cases/UAP-Reporting-Trends/"
     ]
   },
   "dow_uap": {

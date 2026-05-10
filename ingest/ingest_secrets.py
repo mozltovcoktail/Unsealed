@@ -25,7 +25,9 @@ Usage:
   python3 ingest/ingest_secrets.py --cache-ttl 0  # ignore cache age
 
 Dependencies (install once):
-  pip3 install requests beautifulsoup4 openpyxl
+  pip3 install requests beautifulsoup4 openpyxl curl_cffi
+  (curl_cffi is only required for sources with "impersonate" set in sources.json,
+  currently aaro.mil — Akamai blocks vanilla urllib regardless of headers.)
 """
 from __future__ import annotations
 
@@ -49,6 +51,16 @@ except ImportError:
         "Missing deps. Run:  pip3 install requests beautifulsoup4 openpyxl\n"
     )
     sys.exit(1)
+
+# Optional: curl_cffi gives us real-browser TLS fingerprints, which is the
+# only way past Akamai-fronted .mil sources (e.g. aaro.mil) that JA3-block
+# vanilla requests / urllib regardless of headers. Loaded lazily so the
+# ingester still works without it for groups that don't need it.
+try:
+    from curl_cffi import requests as _cffi_requests  # type: ignore
+    _HAS_CFFI = True
+except ImportError:
+    _HAS_CFFI = False
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES_FILE = ROOT / "ingest" / "sources.json"
@@ -112,6 +124,7 @@ def fetch(
     no_cache: bool = False,
     ttl_sec: int | None = None,
     extra_headers: dict | None = None,
+    impersonate: str | None = None,
 ) -> bytes | str:
     cache, meta = _cache_paths(url, binary)
     if not no_cache and cache.exists():
@@ -123,7 +136,19 @@ def fetch(
     headers = {"user-agent": USER_AGENT, "From": FROM_HEADER}
     if extra_headers:
         headers.update(extra_headers)
-    r = requests.get(url, headers=headers, timeout=TIMEOUT)
+    if impersonate:
+        if not _HAS_CFFI:
+            raise RuntimeError(
+                f"source needs impersonate={impersonate!r} but curl_cffi is not installed. "
+                "Run: pip3 install curl_cffi"
+            )
+        # curl_cffi sets its own UA/headers based on the impersonate profile.
+        # We pass extra_headers (e.g. API keys) but not our default UA, which
+        # would override the profile's fingerprint-consistent set.
+        cffi_headers = dict(extra_headers) if extra_headers else None
+        r = _cffi_requests.get(url, headers=cffi_headers, impersonate=impersonate, timeout=TIMEOUT)
+    else:
+        r = requests.get(url, headers=headers, timeout=TIMEOUT)
     r.raise_for_status()
     if binary:
         cache.write_bytes(r.content)
@@ -601,13 +626,18 @@ def main() -> int:
         "new_artifacts": {},
     }
 
-    def fetch_opts(*, is_hub: bool) -> dict:
-        ttl = (
-            args.cache_ttl
-            if args.cache_ttl is not None
-            else (DEFAULT_HUB_TTL_SEC if is_hub else DEFAULT_ARTIFACT_TTL_SEC)
-        )
-        return {"no_cache": args.no_cache, "ttl_sec": ttl}
+    def make_fetch_opts(impersonate: str | None):
+        def fetch_opts(*, is_hub: bool) -> dict:
+            ttl = (
+                args.cache_ttl
+                if args.cache_ttl is not None
+                else (DEFAULT_HUB_TTL_SEC if is_hub else DEFAULT_ARTIFACT_TTL_SEC)
+            )
+            opts = {"no_cache": args.no_cache, "ttl_sec": ttl}
+            if impersonate:
+                opts["impersonate"] = impersonate
+            return opts
+        return fetch_opts
 
     for g in groups:
         if g not in cfg:
@@ -623,7 +653,7 @@ def main() -> int:
             continue
         print(f"[{g}] parsing...", file=sys.stderr)
         try:
-            recs, artifacts = PARSERS[g](cfg[g], args.limit, fetch_opts=fetch_opts)
+            recs, artifacts = PARSERS[g](cfg[g], args.limit, fetch_opts=make_fetch_opts(cfg[g].get("impersonate")))
         except Exception as e:
             print(f"[{g}] FAILED: {e}", file=sys.stderr)
             report["groups"][g] = {"status": "error", "error": str(e)}

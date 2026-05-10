@@ -34,7 +34,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install python deps
-        run: pip install --quiet requests beautifulsoup4 openpyxl
+        # curl_cffi gives real-browser TLS fingerprints; required for sources
+        # behind Akamai bot-detection (e.g. aaro.mil) that JA3-block urllib.
+        run: pip install --quiet requests beautifulsoup4 openpyxl curl_cffi
 
       - name: Run ingester
         env:

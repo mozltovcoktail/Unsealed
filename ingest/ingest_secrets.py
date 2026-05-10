@@ -117,6 +117,9 @@ def _cache_paths(url: str, binary: bool) -> tuple[Path, Path]:
     return CACHE_DIR / f"{key}{suffix}", CACHE_DIR / f"{key}.meta.json"
 
 
+_LAST_FETCH_AT: dict[str, float] = {}
+
+
 def fetch(
     url: str,
     *,
@@ -125,6 +128,7 @@ def fetch(
     ttl_sec: int | None = None,
     extra_headers: dict | None = None,
     impersonate: str | None = None,
+    crawl_delay_sec: int = 0,
 ) -> bytes | str:
     cache, meta = _cache_paths(url, binary)
     if not no_cache and cache.exists():
@@ -132,6 +136,14 @@ def fetch(
         max_age = ttl_sec if ttl_sec is not None else DEFAULT_HUB_TTL_SEC
         if max_age <= 0 or age < max_age:
             return cache.read_bytes() if binary else cache.read_text("utf-8", "replace")
+    # Polite rate-limit: honor per-host crawl-delay between non-cached requests.
+    if crawl_delay_sec > 0:
+        host = urlparse(url).netloc
+        last = _LAST_FETCH_AT.get(host, 0.0)
+        wait = crawl_delay_sec - (time.time() - last)
+        if wait > 0:
+            time.sleep(wait)
+        _LAST_FETCH_AT[host] = time.time()
     print(f"  fetch {url}", file=sys.stderr)
     headers = {"user-agent": USER_AGENT, "From": FROM_HEADER}
     if extra_headers:
@@ -558,10 +570,179 @@ def parse_aaro(group_cfg: dict, limit: int | None, *, fetch_opts) -> tuple[list[
     return out, artifacts
 
 
+# ─── State FRUS parser ────────────────────────────────────────────
+# Foreign Relations of the United States — the authoritative declassified
+# diplomatic record. 551 EPUB volumes covering 1861-1989+, each containing
+# 100-400 documents with clean structure: <h3> title, <p class="dateline">
+# original document date, body paragraphs. We use the EPUBs (rather than
+# crawling per-document URLs) because robots.txt has Crawl-delay: 20 — at
+# 1 doc/20s the per-document path would take 116 days; one EPUB per
+# volume × 551 volumes × 20s = ~3hr first run, then near-zero (FRUS
+# publishes ~1-3 volumes/year).
+_FRUS_EBOOKS_INDEX = "https://history.state.gov/historicaldocuments/ebooks"
+_FRUS_EPUB_RX = re.compile(
+    r"https://static\.history\.state\.gov/frus/([a-z0-9-]+)/ebook/[^.]+\.epub", re.I
+)
+_FRUS_TITLE_RX = re.compile(r"<h3[^>]*>(.*?)</h3>", re.S | re.I)
+# Modern volumes: <p class="dateline">. Old volumes: <div class="opener">.
+_FRUS_DATELINE_RX = re.compile(
+    r'<p[^>]+class="dateline"[^>]*>(.*?)</p>', re.S | re.I
+)
+_FRUS_OPENER_RX = re.compile(
+    r'<div[^>]+class="opener"[^>]*>(.*?)</div>', re.S | re.I
+)
+_FRUS_ANY_P_RX = re.compile(r"<p[^>]*>(.*?)</p>", re.S | re.I)
+_FRUS_DOCNUM_RX = re.compile(r"^\s*\[document\s+\d+\]\s*$", re.I)
+_FRUS_OPF_TITLE_RX = re.compile(r"<dc:title>(.*?)</dc:title>", re.S | re.I)
+_FRUS_MONTH_DAY_YEAR_RX = re.compile(
+    r"(?:^|,\s*)(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+    r"jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+    r"\s+(\d{1,2}),?\s+(\d{4})",
+    re.I,
+)
+
+
+def _strip_html(s: str) -> str:
+    # Drop footnote/superscript content entirely (FRUS titles have trailing
+    # <sup>1</sup> markers we don't want bleeding into stored data).
+    s = re.sub(r"<sup\b[^>]*>.*?</sup>", "", s, flags=re.S | re.I)
+    s = re.sub(r"<[^>]+>", "", s)
+    s = (
+        s.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", '"')
+        .replace("&#x2014;", "—")
+        .replace("&#x2013;", "–")
+        .replace("&#x2019;", "’")
+        .replace("&nbsp;", " ")
+    )
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _frus_parse_dateline(text: str) -> str:
+    m = _FRUS_MONTH_DAY_YEAR_RX.search(text)
+    if not m:
+        # Try "Month YYYY" without day
+        m2 = re.search(
+            r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{4})\b",
+            text, re.I,
+        )
+        if not m2:
+            return ""
+        mo = _MONTHS[m2.group(1).lower()[:3]]
+        y = int(m2.group(2))
+        return f"{y:04d}-{mo:02d}-01"
+    mo = _MONTHS[m.group(1).lower()[:3]]
+    day = int(m.group(2))
+    y = int(m.group(3))
+    return f"{y:04d}-{mo:02d}-{day:02d}"
+
+
+def parse_frus(group_cfg: dict, limit: int | None, *, fetch_opts) -> tuple[list[Record], list[str]]:
+    import zipfile
+    import io as _io
+
+    out: list[Record] = []
+    artifacts: list[str] = []
+
+    index_html = fetch(_FRUS_EBOOKS_INDEX, **fetch_opts(is_hub=True))
+    epub_urls = sorted({m.group(0): m.group(1) for m in _FRUS_EPUB_RX.finditer(index_html)}.items())
+    print(f"[frus] {len(epub_urls)} EPUB volumes discovered", file=sys.stderr)
+
+    for epub_url, vol_id in epub_urls:
+        artifacts.append(epub_url)
+        try:
+            data = fetch(epub_url, binary=True, **fetch_opts(is_hub=False))
+        except Exception as e:
+            print(f"  [frus] skip {vol_id}: {e}", file=sys.stderr)
+            continue
+        try:
+            z = zipfile.ZipFile(_io.BytesIO(data))
+        except zipfile.BadZipFile as e:
+            print(f"  [frus] bad zip {vol_id}: {e}", file=sys.stderr)
+            continue
+
+        # Volume metadata from the OPF — we use only the title. The
+        # <dc:identifier> embeds the EPUB *rebuild* date (often 2018+ even
+        # for an 1861 volume), so it's a poor proxy for when the volume
+        # was actually published / declassified. We use the document's own
+        # date as `unsealed_date` instead (correct within months for old
+        # volumes, off by years for modern volumes — but always extractable
+        # and consistent with how users browse FRUS).
+        opf_name = next((n for n in z.namelist() if n.endswith(".opf")), None)
+        vol_title = vol_id
+        if opf_name:
+            opf = z.read(opf_name).decode("utf-8", "replace")
+            mt = _FRUS_OPF_TITLE_RX.search(opf)
+            if mt:
+                vol_title = _strip_html(mt.group(1))
+
+        # Per-document files: OEBPS/dN.html (numbered docs only — skip
+        # frontmatter like cover/title/preface).
+        doc_files = sorted(
+            [n for n in z.namelist() if re.search(r"/d\d+\.html$", n)],
+            key=lambda n: int(re.search(r"/d(\d+)\.html$", n).group(1)),
+        )
+        for doc_name in doc_files:
+            doc_num = re.search(r"/d(\d+)\.html$", doc_name).group(1)
+            body = z.read(doc_name).decode("utf-8", "replace")
+
+            mt = _FRUS_TITLE_RX.search(body)
+            title = _strip_html(mt.group(1)) if mt else ""
+            # Strip leading "N. " numbering
+            title = re.sub(r"^\d+\.\s+", "", title)
+            if not title:
+                continue
+
+            # Date: dateline (modern) → opener div (old) → fallback scan.
+            md = _FRUS_DATELINE_RX.search(body)
+            if md:
+                doc_date_text = _strip_html(md.group(1))
+            else:
+                mo = _FRUS_OPENER_RX.search(body)
+                doc_date_text = _strip_html(mo.group(1)) if mo else ""
+            doc_date = _frus_parse_dateline(doc_date_text) if doc_date_text else ""
+
+            # First substantive paragraph (skip "[Document N]" markers).
+            preview = None
+            for pm in _FRUS_ANY_P_RX.finditer(body):
+                p = _strip_html(pm.group(1))
+                if not p or _FRUS_DOCNUM_RX.match(p):
+                    continue
+                # Skip the dateline paragraph itself (we already have it).
+                if p == doc_date_text:
+                    continue
+                preview = p[:400]
+                break
+
+            description = None
+            if doc_date_text or preview:
+                description = " // ".join(
+                    [s for s in (doc_date_text, preview) if s]
+                )[:500]
+
+            out.append(
+                Record(
+                    title=title,
+                    agency=group_cfg["agency"],
+                    unsealed_date=doc_date,
+                    collection_id=vol_title,
+                    source_url=f"https://history.state.gov/historicaldocuments/{vol_id}/d{doc_num}",
+                    description=description,
+                    source_artifact_url=epub_url,
+                )
+            )
+            if limit and len(out) >= limit:
+                return out, artifacts
+    return out, artifacts
+
+
 PARSERS = {
     "nara_ndc": parse_nara_ndc,
     "nara_catalog": parse_nara_catalog,
     "aaro": parse_aaro,
+    "frus": parse_frus,
     # dow_uap intentionally absent until a verified source URL exists.
 }
 
@@ -626,7 +807,7 @@ def main() -> int:
         "new_artifacts": {},
     }
 
-    def make_fetch_opts(impersonate: str | None):
+    def make_fetch_opts(impersonate: str | None, crawl_delay_sec: int):
         def fetch_opts(*, is_hub: bool) -> dict:
             ttl = (
                 args.cache_ttl
@@ -636,6 +817,8 @@ def main() -> int:
             opts = {"no_cache": args.no_cache, "ttl_sec": ttl}
             if impersonate:
                 opts["impersonate"] = impersonate
+            if crawl_delay_sec:
+                opts["crawl_delay_sec"] = crawl_delay_sec
             return opts
         return fetch_opts
 
@@ -653,7 +836,7 @@ def main() -> int:
             continue
         print(f"[{g}] parsing...", file=sys.stderr)
         try:
-            recs, artifacts = PARSERS[g](cfg[g], args.limit, fetch_opts=make_fetch_opts(cfg[g].get("impersonate")))
+            recs, artifacts = PARSERS[g](cfg[g], args.limit, fetch_opts=make_fetch_opts(cfg[g].get("impersonate"), int(cfg[g].get("crawl_delay_sec", 0))))
         except Exception as e:
             print(f"[{g}] FAILED: {e}", file=sys.stderr)
             report["groups"][g] = {"status": "error", "error": str(e)}

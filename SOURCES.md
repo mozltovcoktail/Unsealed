@@ -9,6 +9,14 @@ human-readable backlog and audit trail that surrounds it.
 
 Last manual review: 2026-05-10.
 
+## Brand scope (DECIDED 2026-05-10)
+
+UNSEALED ingests **records that were once classified and are now public** — no time bound, all the way back through the Cold War, WWII, and earlier where such material was eventually declassified. We do NOT ingest material that was unclassified-by-default (Federal Register, Congressional Record, GAO, USGS, NIST, Presidential Public Papers, etc.).
+
+CRS Reports were unclassified-but-suppressed, not classified — moved to §5 (out of scope).
+
+Brand strap (`index.html`) currently reads "RECENTLY DECLASSIFIED" — outdated under this scope, since we now want 1940s/50s/60s material too. Strap rewrite is a follow-up (see open decisions).
+
 ## Legend
 - ✅ **LIVE** — parser runs in the weekly `ingest.yml`, rows are in D1
 - 🟡 **PARTIAL** — code exists but blocked on something (API key, scope decision, etc.)
@@ -51,8 +59,7 @@ These are the next big rocks. Each is in scope, scrape-friendly, and adds 100k+ 
 | 2.6 | **DOE OpenNet** | DOE | 🔵 | Search API at `osti.gov/opennet` | ~500k records | DOE/AEC declassified nuclear-related records. |
 | 2.7 | **NSA Declassified Documents** | NSA | 🔵 | HTML scrape | small (<10k) | `nsa.gov/news-features/declassified-documents`. High-prestige releases (VENONA, BOURBON, etc.). |
 | 2.8 | **JFK Records Collection** | NARA | 🔵 | NARA-hosted catalog + bulk lists | ~5M pages | `archives.gov/research/jfk`. Mostly digitized. Could fold into NARA Catalog group. |
-| 2.9 | **CRS Reports** | LoC / Congress | 🔵 | Official JSON at `crsreports.congress.gov` | ~15k reports | Congressional Research Service — was suppressed for decades, now official + bulk-listable. |
-| 2.10 | **ODNI — IC on the Record** | ODNI | 🔵 | HTML scrape | <5k | Post-Snowden surveillance declassifications. `dni.gov` + `icontherecord.tumblr.com`. |
+| 2.9 | **ODNI — IC on the Record** | ODNI | 🔵 | HTML scrape | <5k | Post-Snowden surveillance declassifications. `dni.gov` + `icontherecord.tumblr.com`. |
 
 ## 3. Federal — specialty / smaller
 
@@ -70,24 +77,20 @@ Each adds <50k rows. Worth doing but lower priority than §2.
 | 3.8 | Department of War / OSD UAP records | DoW | 🟡 | URL TBD | `ingest/sources.json::dow_uap.urls` empty until 2026 release URL provided. |
 | 3.9 | Wilson Center Digital Archive | (academic, but hosts gov-released material) | 🔵 | API | Cold War international docs. ToS review needed before scrape. |
 
-## 4. Born-unclassified federal corpus
+## 4. Born-unclassified federal corpus — EXCLUDED (decided 2026-05-10)
 
-These are NOT "secret stuff that was declassified" — they were public-by-default from day one. Brand-fit is debatable. **Decision needed.**
+These were public-by-default from day one. UNSEALED's brand is records that *were* classified, so this whole tier is out:
 
-| # | Source | Agency | Status | Notes |
-|---|---|---|:---:|---|
-| 4.1 | Federal Register | OFR / GPO | ⚪? | Daily executive-branch rulemaking. Via govinfo. |
-| 4.2 | Code of Federal Regulations | OFR / GPO | ⚪? | Compiled regs. Via govinfo. |
-| 4.3 | Congressional Record | Congress | ⚪? | Daily floor proceedings. Via govinfo. |
-| 4.4 | GAO Reports | GAO | ⚪? | `gao.gov` — bulk API. Audit & evaluation reports. |
-| 4.5 | USGS publications | USGS | ⚪? | Scientific reports. |
-| 4.6 | NIST publications | NIST | ⚪? | Standards + research. |
-| 4.7 | Presidential Public Papers | NARA / GPO | ⚪? | Press releases, exec orders. Via govinfo. |
+- Federal Register, CFR, Congressional Record, GAO reports, USGS, NIST, Presidential Public Papers, govinfo.gov as a whole.
+
+(govinfo's bulk API would still be useful as a *cross-reference* — e.g., looking up the original classification authority for an EO cited in a declassified doc — but not as an ingest target.)
 
 ## 5. Out of scope (for now)
 
 | Source | Reason |
 |---|---|
+| CRS Reports (`crsreports.congress.gov`) | Unclassified-but-suppressed, not classified. Out under the "previously classified" brand-scope rule. |
+| Federal Register / CFR / Congressional Record / GAO / USGS / NIST / Presidential Public Papers / govinfo.gov | Born-unclassified — see §4. |
 | GWU National Security Archive (`nsarchive.gwu.edu`) | Non-gov, academic. Their compilations may have site-specific ToS; need explicit permission/legal review before scrape. The underlying docs are public-domain so we could re-source them directly from the originating agency. |
 | MuckRock (`muckrock.com`) | Non-gov, FOIA platform. Has Terms of Service governing crawler use. Has an API — use that path if we ever onboard, not scrape. |
 | The Black Vault (`theblackvault.com`) | Non-gov, single-operator FOIA archive. ToS unclear. |
@@ -97,35 +100,11 @@ These are NOT "secret stuff that was declassified" — they were public-by-defau
 
 ---
 
-## Open scope decisions
+## Decisions log
 
-These are surfaced for Aaron — see `CLAUDE.md` §"Defer to Aaron on product-level decisions".
-
-🟧 **DECISION #1: Brand scope — does UNSEALED ingest only "declassified" material, or all unclassified federal records?**
-
-- (a) **Declassified-only.** Strap reads "RECENTLY DECLASSIFIED". §1, §2, §3 are in. §4 is out. Strong brand identity; smaller corpus.
-- (b) **All unclassified.** §4 in too: Federal Register, Congressional Record, GAO, USGS, NIST, Public Papers. Strap broadens to "U.S. GOVERNMENT RECORDS". Order-of-magnitude more rows; brand becomes "the search engine for federal publications". Closer to a govinfo mirror with extra reach.
-- (c) **Two tiers.** Default search is declassified-only; a toggle (like the `+ SEALED` one we just shipped) opts users into the wider unclassified corpus. Best of both, but doubles the ingest + indexing cost.
-
-**Recommend (a)** for now. UNSEALED's name and visual identity carry a strong "secrets revealed" promise. Born-public material would dilute that. If usage grows, (c) becomes easy to add — we already have the toggle-as-filter pattern.
-
-🟧 **DECISION #2: Implementation priority for §2 sources?**
-
-Default sequence (rough effort + payoff judgment):
-
-- (a) **CIA CREST → State FRUS → FBI Vault → DOE OpenNet → NSA → ODNI** (brand-fit first, biggest-volume tail later)
-- (b) **State FRUS → CIA CREST → FBI Vault → CRS → DOE OpenNet → NSA → ODNI** (cleanest data first — FRUS is unusually well-structured, fastest to ship)
-- (c) Different order — name it.
-
-**Recommend (b).** FRUS is the lowest-risk first parser to validate the §2 expansion pattern (one parser → 500k clean rows). CREST is the highest-prestige but messier (~13M scanned pages, OCR'd metadata varies). Doing FRUS first de-risks the toolchain before we hit the messier ones.
-
-🟧 **DECISION #3: Third-party aggregators (§5) — keep excluded, or reach out for permission to ingest?**
-
-- (a) **Keep excluded.** All their content is reachable upstream from the agency; we just write more parsers. Cleanest legally.
-- (b) **Reach out** to GWU NSArchive and MuckRock for explicit permission to index their FOIA-release attachments. Could 10x our coverage of obscure agency releases overnight.
-- (c) **MuckRock API only** — their public API is explicitly for programmatic use within their ToS. Lower-risk variant of (b).
-
-**Recommend (a) for v1, revisit (c) later.** No legal exposure, no relationship overhead, and §2 + §3 alone are ~6 months of parser work.
+- **2026-05-10 — Brand scope:** previously-classified only, no time bound (§1+§2+§3 in, §4 out, CRS moved to §5). Strap text in `index.html` likely wants a rewrite to drop "RECENTLY" — TBD.
+- **2026-05-10 — Parser order:** **State FRUS → CIA CREST → FBI Vault → DOE OpenNet → NSA Declass → ODNI**, then §3 long tail.
+- **2026-05-10 — Aggregators:** keep §5 excluded. No outreach to GWU NSArchive / MuckRock / Black Vault for v1.
 
 ---
 

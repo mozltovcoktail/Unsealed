@@ -116,6 +116,16 @@
       "https://www.aaro.mil/UAP-Cases/UAP-Reporting-Trends/"
     ]
   },
+  "frus": {
+    "agency": "STATE",
+    "collection_id_default": "Foreign Relations of the United States",
+    "_note": "FRUS — declassified diplomatic record, 1861-1989+. Bulk EPUBs at static.history.state.gov. robots.txt requires 20s crawl-delay; one-time bulk import is ~3hr, then steady-state ~zero (FRUS publishes 1-3 volumes/year).",
+    "impersonate": "chrome",
+    "crawl_delay_sec": 20,
+    "urls": [
+      "https://history.state.gov/historicaldocuments/ebooks"
+    ]
+  },
   "dow_uap": {
     "agency": "DoW",
     "collection_id_default": "Department of War \u2014 UAP Records",

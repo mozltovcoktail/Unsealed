@@ -1,11 +1,18 @@
 {
-  "run_id": "2026-05-10T23:10:30Z",
+  "run_id": "2026-05-10T23:35:57Z",
   "groups": {
     "aaro": {
-      "status": "error",
-      "error": "403 Client Error: Forbidden for url: https://www.aaro.mil/Cases-and-Reports/"
+      "status": "ok",
+      "records": 10,
+      "artifacts": 2,
+      "new_artifacts": 2
     }
   },
-  "total_records": 0,
-  "new_artifacts": {}
+  "total_records": 10,
+  "new_artifacts": {
+    "aaro": [
+      "https://www.aaro.mil/UAP-Cases/UAP-Case-Resolution-Reports/",
+      "https://www.aaro.mil/UAP-Cases/UAP-Reporting-Trends/"
+    ]
+  }
 }

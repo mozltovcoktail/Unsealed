@@ -53,6 +53,16 @@ wrangler pages dev ./dist --d1=DB --port 8788     # API
 - Monospace for metadata + query field. Sans-serif heavyweight for titles + masthead.
 - All host calls (thumb proxy, preview agent) gate on a `.gov` / `.mil` allow-list. Never proxy arbitrary URLs.
 
+## Staying current
+
+Three GitHub Actions keep the corpus fresh — see [OPERATIONS.md](OPERATIONS.md).
+- `discover.yml` (weekly) finds new `.gov`/`.mil` source URLs.
+- `ingest.yml` (weekly) re-runs the parsers and upserts into D1.
+- `auto-merge.yml` (daily) merges discovery PRs after a 24h review window.
+
+Trust boundary: only `.gov` / `.mil` (+ a tiny curated list) auto-promote.
+Every auto-add is a reviewable, revertable commit.
+
 ## Open product questions (not yet decided)
 - PDF page-1 rasterization — preview.js currently returns metadata only. A pdf.js Worker is the obvious next move but warrants its own decision.
 - Verified Department of War UAP source URL — `ingest/sources.json::dow_uap.urls` is empty until provided.

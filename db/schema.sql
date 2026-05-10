@@ -5,19 +5,41 @@ PRAGMA foreign_keys = ON;
 
 -- ─── Canonical content table ──────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS records (
-  id            INTEGER PRIMARY KEY,
-  title         TEXT NOT NULL,
-  agency        TEXT NOT NULL,             -- 'NARA' | 'CIA' | 'NASA' | 'DoW' | 'AARO' | ...
-  unsealed_date TEXT NOT NULL,             -- ISO 8601 'YYYY-MM-DD' (D1 has no DATE type)
-  collection_id TEXT,                      -- e.g. 'RG 263', 'JFK Assassination Records'
-  source_url    TEXT NOT NULL,
-  description   TEXT,                      -- often present in NDC release lists
-  thumbnail_url TEXT,                      -- hot-link target; proxied via /api/thumb
-  ingested_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  id                  INTEGER PRIMARY KEY,
+  title               TEXT NOT NULL,
+  agency              TEXT NOT NULL,             -- 'NARA' | 'CIA' | 'NASA' | 'DoW' | 'AARO' | ...
+  unsealed_date       TEXT NOT NULL,             -- ISO 8601 'YYYY-MM-DD' (D1 has no DATE type)
+  collection_id       TEXT,                      -- e.g. 'RG 263', 'JFK Assassination Records'
+  source_url          TEXT NOT NULL,
+  description         TEXT,                      -- often present in NDC release lists
+  thumbnail_url       TEXT,                      -- hot-link target; proxied via /api/thumb
+  ingested_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+
+  -- Provenance (added 2026 for idempotent re-ingest + auditability)
+  source_artifact_url TEXT,                      -- the .xlsx / .pdf / hub URL the row came from
+  ingest_run_id       TEXT,                      -- ISO timestamp of the ingest run
+  content_hash        TEXT,                      -- sha1(agency|title|source_url) for dedup
+  UNIQUE(content_hash)
 );
 
 CREATE INDEX IF NOT EXISTS idx_records_agency        ON records(agency);
 CREATE INDEX IF NOT EXISTS idx_records_unsealed_date ON records(unsealed_date);
+CREATE INDEX IF NOT EXISTS idx_records_artifact      ON records(source_artifact_url);
+CREATE INDEX IF NOT EXISTS idx_records_run           ON records(ingest_run_id);
+
+-- ─── Discovery audit log ──────────────────────────────────────────────────
+-- Every auto-discovered URL lands here first. Only `.gov` / `.mil` are
+-- auto-promoted into ingest/sources.json; this table is the audit trail.
+CREATE TABLE IF NOT EXISTS discovered_sources (
+  id              INTEGER PRIMARY KEY,
+  url             TEXT NOT NULL UNIQUE,
+  domain          TEXT NOT NULL,
+  found_via       TEXT NOT NULL,             -- 'rss:archives.gov', 'hub-diff:nara_ndc', etc.
+  found_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  promoted_at     TEXT,                      -- when it landed in sources.json
+  status          TEXT NOT NULL DEFAULT 'pending'  -- 'pending' | 'promoted' | 'rejected'
+);
+CREATE INDEX IF NOT EXISTS idx_discovered_status ON discovered_sources(status);
 
 -- ─── FTS5 virtual table (external content) ────────────────────────────────
 -- Trigram tokenizer → substring + typo-tolerant matching.

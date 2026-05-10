@@ -1,0 +1,50 @@
+name: auto-merge
+
+# Daily sweep: merges any open PR labeled `auto-merge-after-24h` that is at
+# least 24 hours old, has no `block-auto-merge` label, and has no failing
+# required checks. Mechanism for the "review at any time, auto-add by default"
+# trust model.
+
+on:
+  schedule:
+    - cron: "11 12 * * *"   # daily 12:11 UTC
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Merge eligible PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # 24h ago in ISO-8601 (BSD/macOS-incompatible date intentionally — runner is Linux)
+          CUTOFF=$(date -u -d "24 hours ago" +%Y-%m-%dT%H:%M:%SZ)
+          echo "Cutoff: $CUTOFF"
+
+          gh pr list \
+            --state open \
+            --label auto-merge-after-24h \
+            --json number,createdAt,labels,title \
+            > prs.json
+
+          jq -c '.[]' prs.json | while read -r pr; do
+            NUM=$(echo "$pr" | jq -r '.number')
+            CREATED=$(echo "$pr" | jq -r '.createdAt')
+            BLOCKED=$(echo "$pr" | jq -r '.labels | map(.name) | index("block-auto-merge")')
+            if [ "$BLOCKED" != "null" ]; then
+              echo "PR #$NUM blocked by label, skipping"
+              continue
+            fi
+            if [[ "$CREATED" > "$CUTOFF" ]]; then
+              echo "PR #$NUM too young ($CREATED > $CUTOFF), skipping"
+              continue
+            fi
+            echo "Merging PR #$NUM (created $CREATED)"
+            gh pr merge "$NUM" --squash --delete-branch || echo "merge failed for #$NUM"
+          done

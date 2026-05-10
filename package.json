@@ -1,0 +1,23 @@
+{
+  "name": "unsealed",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Brutalist mobile-first search across recently unsealed government records (NARA / CIA / NASA / DoW UAP / AARO).",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "pages:dev": "wrangler pages dev ./dist --d1=DB --compatibility-date=2024-09-23 --port 5184",
+    "d1:apply:local": "wrangler d1 execute unsealed --local --file=./db/schema.sql",
+    "d1:apply:remote": "wrangler d1 execute unsealed --remote --file=./db/schema.sql",
+    "d1:seed:local": "wrangler d1 execute unsealed --local --file=./db/seed.sql",
+    "d1:seed:remote": "wrangler d1 execute unsealed --remote --file=./db/seed.sql",
+    "ingest": "python3 ingest/ingest_secrets.py",
+    "ingest:dry": "python3 ingest/ingest_secrets.py --dry-run"
+  },
+  "devDependencies": {
+    "vite": "^7.3.1",
+    "wrangler": "^4.71.0"
+  }
+}

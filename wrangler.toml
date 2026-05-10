@@ -1,0 +1,16 @@
+name = "unsealed"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "./dist"
+
+# D1 binding — `database_id` filled in after `wrangler d1 create unsealed`.
+# Code accesses this as `env.DB` inside Pages Functions.
+[[d1_databases]]
+binding = "DB"
+database_name = "unsealed"
+database_id = "c53561b1-a934-4b3d-89c9-22e9c22f910f"
+
+# Cache-namespace for thumbnail proxy (optional, edge cache also works).
+# Uncomment after `wrangler kv:namespace create THUMB_CACHE` if you want longer TTLs.
+# [[kv_namespaces]]
+# binding = "THUMB_CACHE"
+# id = "..."

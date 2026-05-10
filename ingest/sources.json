@@ -1,0 +1,48 @@
+{
+  "_comment": "Drop URLs to NARA NDC quarterly release lists (.xlsx or .csv) into nara_ndc.urls. Drop AARO public-doc-library or DoW UAP page URLs into aaro.urls. The ingester will fetch, parse, normalize, and upsert into the local SQLite (or D1 via wrangler).",
+
+  "nara_ndc": {
+    "agency": "NARA",
+    "collection_id_default": "National Declassification Center",
+    "urls": [
+      "https://www.archives.gov/declassification/ndc/release-lists",
+      "https://www.archives.gov/declassification/ndc",
+      "https://www.archives.gov/files/declassification/ndc/2023-ndc-4th-quarter-release-list-excel.xlsx",
+      "https://www.archives.gov/files/declassification/ndc/2024-ndc-1st-quarter-release-list-excel.xlsx",
+      "https://www.archives.gov/files/declassification/ndc/2024-ndc-2nd-quarter-release-list-excel.xlsx",
+      "https://www.archives.gov/files/2nd-quarter-release-list-fy-25.xlsx",
+      "https://www.archives.gov/files/2nd-quarter-release-list-fy-26.xlsx"
+    ]
+  },
+
+  "nara_catalog": {
+    "agency": "NARA",
+    "collection_id_default": "NARA Catalog",
+    "_note": "Uses the NARA Catalog API. Each entry is one search query with a row cap; the ingester runs them all and dedupes by NAID.",
+    "queries": [
+      { "q": "declassified", "limit": 500 },
+      { "q": "CIA",          "limit": 300 },
+      { "q": "FBI",          "limit": 300 },
+      { "q": "Vietnam",      "limit": 300 },
+      { "q": "Cold War",     "limit": 300 },
+      { "q": "UAP UFO",      "limit": 200 },
+      { "q": "nuclear",      "limit": 200 },
+      { "q": "Korean War",   "limit": 200 }
+    ]
+  },
+
+  "aaro": {
+    "agency": "AARO",
+    "collection_id_default": "AARO Public Releases",
+    "urls": [
+      "https://www.aaro.mil/Cases-and-Reports/"
+    ]
+  },
+
+  "dow_uap": {
+    "agency": "DoW",
+    "collection_id_default": "Department of War — UAP Records",
+    "urls": [],
+    "_note": "Drop the specific 2026 release URL here when you have it."
+  }
+}

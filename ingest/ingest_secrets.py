@@ -30,6 +30,7 @@ Dependencies (install once):
 from __future__ import annotations
 
 import argparse
+import calendar
 import datetime as _dt
 import hashlib
 import json
@@ -56,7 +57,12 @@ CACHE_DIR = ROOT / "ingest" / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 SEEN_ARTIFACTS_FILE = ROOT / "ingest" / "seen_artifacts.json"
 
-USER_AGENT = "UNSEALED/0.2 (+ingest; contact: aaron)"
+USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+    "Version/17.4 Safari/605.1.15"
+)
+FROM_HEADER = "unsealed-bot@github.com/mozltovcoktail/Unsealed"
 TIMEOUT = 30
 
 # Default cache TTL: hub pages get 7 days (we want to see new releases),
@@ -78,6 +84,7 @@ class Record:
     description: str | None = None
     thumbnail_url: str | None = None
     source_artifact_url: str | None = None  # provenance
+    is_sealed: int = 0  # 1 = record is on a candidate / pre-release list, not actually unsealed
     content_hash: str = ""
 
     def __post_init__(self):
@@ -113,7 +120,7 @@ def fetch(
         if max_age <= 0 or age < max_age:
             return cache.read_bytes() if binary else cache.read_text("utf-8", "replace")
     print(f"  fetch {url}", file=sys.stderr)
-    headers = {"user-agent": USER_AGENT}
+    headers = {"user-agent": USER_AGENT, "From": FROM_HEADER}
     if extra_headers:
         headers.update(extra_headers)
     r = requests.get(url, headers=headers, timeout=TIMEOUT)
@@ -172,6 +179,9 @@ def parse_nara_ndc(group_cfg: dict, limit: int | None, *, fetch_opts) -> tuple[l
         except Exception as e:
             print(f"  skip {art}: {e}", file=sys.stderr)
             continue
+        # IOD-candidate spreadsheets list entries proposed for declassification,
+        # not yet released. Tag them so the UI can filter them out by default.
+        sealed = 1 if "iod-candidate" in art.lower() else 0
         for row in rows:
             out.append(
                 Record(
@@ -183,6 +193,7 @@ def parse_nara_ndc(group_cfg: dict, limit: int | None, *, fetch_opts) -> tuple[l
                     source_url=row.get("source_url") or art,
                     description=row.get("description"),
                     source_artifact_url=art,
+                    is_sealed=sealed,
                 )
             )
             if limit and len(out) >= limit:
@@ -223,10 +234,60 @@ def _parse_release_artifact(url: str, *, fetch_opts) -> list[dict]:
 
 _FY_RX = re.compile(r"(?P<q>1st|2nd|3rd|4th)[^a-z0-9]+quarter[^a-z0-9]+(?:release[^a-z0-9]+)?(?:list[^a-z0-9]+)?(?:fy[^a-z0-9]*)?(?P<y>\d{2,4})", re.I)
 _YEAR_FIRST_RX = re.compile(r"(?P<y>\d{4})[^a-z0-9]+ndc[^a-z0-9]+(?P<q>1st|2nd|3rd|4th)", re.I)
+# FY2019-Q2, FY2020_Q1, fy2024q3 etc.
+_FY_COMPACT_RX = re.compile(r"fy[-_]?(?P<y>20\d\d)[-_]?q(?P<q>[1-4])", re.I)
+# 2023-3rd-quarter, 2024_4th_quarter
+_CY_ORDINAL_RX = re.compile(
+    r"(?P<y>20\d\d)[-_](?P<q>[1-4])(?:st|nd|rd|th)[-_]?quarter", re.I
+)
+# q4-2022, q1-2024 (quarter then year)
+_CY_QYYYY_RX = re.compile(r"q(?P<q>[1-4])[-_](?P<y>20\d\d)", re.I)
+# q1-february-23 (quarter, month-word, 2-digit year)
+_CY_QMONTH_YY_RX = re.compile(
+    r"q(?P<q>[1-4])[-_](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[-_](?P<y>\d{2})\b",
+    re.I,
+)
+# 2nd-qt-2023 (ordinal, qt/qtr, year)
+_CY_ORD_QT_RX = re.compile(
+    r"(?P<q>[1-4])(?:st|nd|rd|th)[-_](?:qt|qtr)[-_](?P<y>20\d\d)", re.I
+)
+# released-entries-05-12.xls → May 2012 (month-end)
+_RELEASED_MONTH_RX = re.compile(
+    r"released-entries-(?P<mo>\d{2})-(?P<y>\d{2})\.xlsx?$", re.I
+)
+
+
+def _q_to_iso(q: int, y: int, *, fiscal: bool) -> str:
+    if fiscal:
+        return {1: f"{y - 1:04d}-12-31", 2: f"{y:04d}-03-31",
+                3: f"{y:04d}-06-30", 4: f"{y:04d}-09-30"}[q]
+    return {1: f"{y:04d}-03-31", 2: f"{y:04d}-06-30",
+            3: f"{y:04d}-09-30", 4: f"{y:04d}-12-31"}[q]
 
 
 def _date_from_filename(url: str) -> str:
     name = url.rsplit("/", 1)[-1].lower()
+    m = _RELEASED_MONTH_RX.search(name)
+    if m:
+        mo, y = int(m.group("mo")), 2000 + int(m.group("y"))
+        if 1 <= mo <= 12:
+            last = calendar.monthrange(y, mo)[1]
+            return f"{y:04d}-{mo:02d}-{last:02d}"
+    m = _FY_COMPACT_RX.search(name)
+    if m:
+        return _q_to_iso(int(m.group("q")), int(m.group("y")), fiscal=True)
+    m = _CY_ORDINAL_RX.search(name)
+    if m:
+        return _q_to_iso(int(m.group("q")), int(m.group("y")), fiscal=False)
+    m = _CY_ORD_QT_RX.search(name)
+    if m:
+        return _q_to_iso(int(m.group("q")), int(m.group("y")), fiscal=False)
+    m = _CY_QMONTH_YY_RX.search(name)
+    if m:
+        return _q_to_iso(int(m.group("q")), 2000 + int(m.group("y")), fiscal=False)
+    m = _CY_QYYYY_RX.search(name)
+    if m:
+        return _q_to_iso(int(m.group("q")), int(m.group("y")), fiscal=False)
     for rx in (_YEAR_FIRST_RX, _FY_RX):
         m = rx.search(name)
         if not m:
@@ -235,11 +296,7 @@ def _date_from_filename(url: str) -> str:
         y = int(m.group("y"))
         if y < 100:
             y += 2000
-        if "fy" in name:
-            return {1: f"{y - 1:04d}-12-31", 2: f"{y:04d}-03-31",
-                    3: f"{y:04d}-06-30", 4: f"{y:04d}-09-30"}[q]
-        return {1: f"{y:04d}-03-31", 2: f"{y:04d}-06-30",
-                3: f"{y:04d}-09-30", 4: f"{y:04d}-12-31"}[q]
+        return _q_to_iso(q, y, fiscal="fy" in name)
     return ""
 
 
@@ -493,11 +550,13 @@ def emit_sql(group: str, records: list[Record]) -> Path:
             f.write(
                 "INSERT OR IGNORE INTO records "
                 "(title, agency, unsealed_date, collection_id, source_url, "
-                "description, thumbnail_url, source_artifact_url, ingest_run_id, content_hash) "
+                "description, thumbnail_url, source_artifact_url, is_sealed, "
+                "ingest_run_id, content_hash) "
                 "VALUES ("
                 f"{_q(r.title)}, {_q(r.agency)}, {_q(r.unsealed_date)}, {_q(r.collection_id)}, "
                 f"{_q(r.source_url)}, {_q(r.description)}, {_q(r.thumbnail_url)}, "
-                f"{_q(r.source_artifact_url)}, {_q(RUN_ID)}, {_q(r.content_hash)}"
+                f"{_q(r.source_artifact_url)}, {int(r.is_sealed)}, "
+                f"{_q(RUN_ID)}, {_q(r.content_hash)}"
                 ");\n"
             )
     return out_path
@@ -520,7 +579,16 @@ def main() -> int:
         "--cache-ttl", type=int, default=None,
         help="hub-page cache TTL in seconds (default: 7d). 0 = always re-fetch."
     )
+    ap.add_argument(
+        "--self-test", action="store_true",
+        help="run internal asserts (date parsing) and exit"
+    )
     args = ap.parse_args()
+
+    if args.self_test:
+        _self_test()
+        print("self-test ok", file=sys.stderr)
+        return 0
 
     cfg = json.loads(SOURCES_FILE.read_text("utf-8"))
     groups = [args.group] if args.group else [g for g in cfg if not g.startswith("_")]
@@ -590,6 +658,35 @@ def main() -> int:
 
     print(f"total: {report['total_records']} records", file=sys.stderr)
     return 0
+
+
+def _self_test() -> None:
+    cases = [
+        # FY-compact: FY2019-Q2 → fiscal Q2 = calendar Q1 of 2019
+        ("https://declassification.blogs.archives.gov/wp-content/uploads/sites/16/2019/07/FY2019-Q2-Release-List-Excel-Format.xlsx", "2019-03-31"),
+        ("https://declassification.blogs.archives.gov/wp-content/uploads/sites/16/2019/08/FY2019-Q3-Release-List-Excel-Format.xlsx", "2019-06-30"),
+        ("https://declassification.blogs.archives.gov/wp-content/uploads/sites/16/2019/10/FY2019-Q4-Release-List-Excel-Format.xlsx", "2019-09-30"),
+        ("https://declassification.blogs.archives.gov/wp-content/uploads/sites/16/2020/01/FY2020-Q1-Release-List-Excel-Format.xlsx", "2019-12-31"),
+        # Calendar-year ordinal quarter
+        ("https://declassification.blogs.archives.gov/wp-content/uploads/sites/16/2023/10/2023-3rd-quarter-release-list.xlsx", "2023-09-30"),
+        ("https://declassification.blogs.archives.gov/wp-content/uploads/sites/16/2023/10/2023-4th-Quarter-Release-List-October-6th.xlsx", "2023-12-31"),
+        # Existing patterns still work
+        ("https://www.archives.gov/files/declassification/ndc/2024-ndc-1st-quarter-release-list-excel.xlsx", "2024-03-31"),
+        ("https://www.archives.gov/files/2nd-quarter-release-list-fy-26.xlsx", "2026-03-31"),
+        # released-entries-MM-YY (legacy monthly NDC lists) → month-end of 20YY-MM
+        ("https://www.archives.gov/declassification/ndc/reports/released-entries-05-12.xls", "2012-05-31"),
+        ("https://www.archives.gov/declassification/ndc/reports/released-entries-07-12.xls", "2012-07-31"),
+        ("https://www.archives.gov/declassification/ndc/reports/released-entries-04-13.xls", "2013-04-30"),
+        # q4-2022 form (quarter then calendar year)
+        ("https://www.archives.gov/files/declassification/ndc/release-list-q4-2022-excel.xlsx", "2022-12-31"),
+        # 2nd-qt-2023 form (ordinal + qt/qtr abbreviation)
+        ("https://www.archives.gov/files/declassification/ndc/reports/release-list-projects-for-2nd-qt-2023.xlsx", "2023-06-30"),
+        # q1-february-23 form (quarter, month-word, 2-digit year)
+        ("https://www.archives.gov/files/declassification/release-list-q1-february-23.xlsx", "2023-03-31"),
+    ]
+    for url, expected in cases:
+        got = _date_from_filename(url)
+        assert got == expected, f"{url}\n  expected {expected!r}, got {got!r}"
 
 
 if __name__ == "__main__":

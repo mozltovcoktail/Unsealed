@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS records (
   source_artifact_url TEXT,                      -- the .xlsx / .pdf / hub URL the row came from
   ingest_run_id       TEXT,                      -- ISO timestamp of the ingest run
   content_hash        TEXT,                      -- sha1(agency|title|source_url) for dedup
+  is_sealed           INTEGER NOT NULL DEFAULT 0,-- 1 = candidate / pre-release entry, not actually unsealed
   UNIQUE(content_hash)
 );
 
@@ -26,6 +27,7 @@ CREATE INDEX IF NOT EXISTS idx_records_agency        ON records(agency);
 CREATE INDEX IF NOT EXISTS idx_records_unsealed_date ON records(unsealed_date);
 CREATE INDEX IF NOT EXISTS idx_records_artifact      ON records(source_artifact_url);
 CREATE INDEX IF NOT EXISTS idx_records_run           ON records(ingest_run_id);
+CREATE INDEX IF NOT EXISTS idx_records_is_sealed     ON records(is_sealed);
 
 -- ─── Discovery audit log ──────────────────────────────────────────────────
 -- Every auto-discovered URL lands here first. Only `.gov` / `.mil` are

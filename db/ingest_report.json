@@ -1,15 +1,29 @@
 {
-  "run_id": "2026-05-11T16:06:42Z",
+  "run_id": "2026-05-11T16:18:14Z",
   "groups": {
-    "frus": {
+    "project_blue_book": {
       "status": "ok",
-      "records": 810,
-      "records_parsed": 313257,
-      "records_already_in_d1": 312447,
-      "artifacts": 551,
-      "new_artifacts": 0
+      "records": 10000,
+      "records_parsed": 10000,
+      "records_already_in_d1": 0,
+      "artifacts": 11,
+      "new_artifacts": 11
     }
   },
-  "total_records": 810,
-  "new_artifacts": {}
+  "total_records": 10000,
+  "new_artifacts": {
+    "project_blue_book": [
+      "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=1&output=json",
+      "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=10&output=json",
+      "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=11&output=json",
+      "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=2&output=json",
+      "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=3&output=json",
+      "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=4&output=json",
+      "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=5&output=json",
+      "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=6&output=json",
+      "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=7&output=json",
+      "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=8&output=json",
+      "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=9&output=json"
+    ]
+  }
 }

@@ -26,9 +26,16 @@ const state = {
   query: '',
   sourceFilter: null, // null = all sources
   includeSealed: false, // show NDC IOD-candidate entries (not yet declassified)
+  activeTopics: new Set(), // topic tags currently filtered IN (e.g. {'UAP'})
   sources: [],        // [{id,label,sublabel}, ...]
   responseSources: [],
 };
+
+// Topics we expose as toggles. Order matters for UI placement. Easy to extend
+// when we add nuclear / vietnam / civil-rights / etc.
+const TOPIC_TOGGLES = [
+  { id: 'UAP', label: '+ UAP', sublabel: 'UFO / ANOMALOUS' },
+];
 
 // ─── Search-as-you-type ────────────────────────────────────────────────
 let searchTimer = null;
@@ -53,6 +60,7 @@ async function runSearch() {
   const params = new URLSearchParams({ q: state.query, limit: '12' });
   if (state.sourceFilter) params.set('source', state.sourceFilter);
   if (state.includeSealed) params.set('include_sealed', '1');
+  if (state.activeTopics.size > 0) params.set('topic', [...state.activeTopics].join(','));
 
   try {
     const r = await fetch(`api/search?${params}`, { signal: inflightCtrl.signal });
@@ -152,8 +160,12 @@ function buildRecord(rec) {
   // it's redundant — true for sources where both fields are the same).
   const showDocDate =
     rec.document_date && rec.document_date !== rec.unsealed_date;
+  const topicPills = Array.isArray(rec.topics)
+    ? rec.topics.map((t) => span(t, 'record__pill--topic'))
+    : [];
   const metaPills = [
     rec.is_sealed ? span('SEALED', 'record__pill--sealed') : null,
+    ...topicPills,
     span(rec.agency || 'UNKNOWN'),
     span(rec.is_sealed ? 'NOT YET UNSEALED' : `UNSEALED ${rec.unsealed_date}`),
     showDocDate ? span(`DOC ${rec.document_date}`, 'record__pill--doc-date') : null,
@@ -269,6 +281,32 @@ function renderSourceToggles() {
     btn.append(lamp, label, sub);
     btn.addEventListener('click', () => {
       state.sourceFilter = state.sourceFilter === s.id ? null : s.id;
+      renderSourceToggles();
+      runSearch();
+    });
+    sourcesEl.appendChild(btn);
+  }
+
+  // Topic toggles — orthogonal filter axis. Each toggle adds/removes its tag
+  // from state.activeTopics, then re-runs the search with ?topic=...
+  for (const t of TOPIC_TOGGLES) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'agency agency--topic';
+    btn.setAttribute('aria-pressed', state.activeTopics.has(t.id) ? 'true' : 'false');
+    btn.dataset.topic = t.id;
+    const lamp = document.createElement('span');
+    lamp.className = 'agency__lamp';
+    const label = document.createElement('span');
+    label.textContent = t.label;
+    const sub = document.createElement('span');
+    sub.className = 'agency__count';
+    sub.textContent = t.sublabel || '';
+    btn.append(lamp, label, sub);
+    btn.title = `Filter results to records tagged ${t.id}.`;
+    btn.addEventListener('click', () => {
+      if (state.activeTopics.has(t.id)) state.activeTopics.delete(t.id);
+      else state.activeTopics.add(t.id);
       renderSourceToggles();
       runSearch();
     });
@@ -405,8 +443,12 @@ function buildFallbackCard(info) {
   dl.className = 'viewer__meta';
   const showDocDate =
     info.document_date && info.document_date !== info.unsealed_date;
+  const topicsList = Array.isArray(info.topics) && info.topics.length
+    ? info.topics.join(' · ')
+    : null;
   const metaPairs = [
     info.is_sealed ? ['STATUS', 'SEALED — PROPOSED FOR DECLASSIFICATION, NOT YET RELEASED'] : null,
+    topicsList ? ['TOPICS', topicsList] : null,
     ['AGENCY', info.agency],
     [info.is_sealed ? 'CANDIDATE LIST DATE' : 'UNSEALED', info.unsealed_date],
     showDocDate ? ['DOCUMENT DATE', info.document_date] : null,

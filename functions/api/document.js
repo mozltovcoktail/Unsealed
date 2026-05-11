@@ -70,7 +70,7 @@ export const onRequestGet = async ({ request, env }) => {
 
   if (source === 'curated') {
     const row = await env.DB.prepare(
-      'SELECT id, title, source_url, agency, unsealed_date, document_date, collection_id, description, is_sealed FROM records WHERE id = ?1',
+      'SELECT id, title, source_url, agency, unsealed_date, document_date, collection_id, description, is_sealed, topics FROM records WHERE id = ?1',
     ).bind(identifier).first();
     if (!row) return json({ error: 'not_found' }, 404);
     const probe = await probeFrameability(row.source_url);
@@ -88,6 +88,7 @@ export const onRequestGet = async ({ request, env }) => {
       embeddable: probe.embeddable,
       reason: probe.reason,
       is_sealed: row.is_sealed === 1,
+      topics: (row.topics || '').split(',').map((t) => t.trim()).filter(Boolean),
     });
   }
 

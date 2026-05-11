@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS records (
   content_hash        TEXT,                      -- sha1(agency|title|source_url) for dedup
   is_sealed           INTEGER NOT NULL DEFAULT 0,-- 1 = candidate / pre-release entry, not actually unsealed
   document_date       TEXT,                      -- ISO 8601; doc's own creation date (FRUS: doc date; vs unsealed_date = volume pub date)
+  topics              TEXT,                      -- ',UAP,NUCLEAR,' style — comma-delimited tags w/ leading+trailing commas
   UNIQUE(content_hash)
 );
 
@@ -30,6 +31,7 @@ CREATE INDEX IF NOT EXISTS idx_records_artifact      ON records(source_artifact_
 CREATE INDEX IF NOT EXISTS idx_records_run           ON records(ingest_run_id);
 CREATE INDEX IF NOT EXISTS idx_records_is_sealed     ON records(is_sealed);
 CREATE INDEX IF NOT EXISTS idx_records_document_date ON records(document_date);
+CREATE INDEX IF NOT EXISTS idx_records_topics        ON records(topics);
 
 -- ─── Discovery audit log ──────────────────────────────────────────────────
 -- Every auto-discovered URL lands here first. Only `.gov` / `.mil` are

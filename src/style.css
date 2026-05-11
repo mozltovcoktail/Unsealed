@@ -219,6 +219,28 @@ a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
 .record__pill--doc-date {
   border-style: dashed !important;
 }
+/* Topic pill — cross-agency tag (UAP, NUCLEAR, etc.). Solid black on
+   white with bold weight so it reads as a category badge, sitting
+   alongside the SEALED pill on the same axis. */
+.record__pill--topic {
+  background: var(--paper);
+  color: var(--ink);
+  border: var(--rule-thick) !important;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+}
+
+/* Topic toggle — same row as source + sealed toggles but visually
+   distinct (thicker border, different lamp). */
+.agency--topic {
+  border-left: var(--rule-thick);
+}
+.agency--topic .agency__lamp {
+  border-radius: 50%;
+}
+.agency--topic[aria-pressed="true"] .agency__lamp {
+  background: var(--paper);
+}
 /* Sealed records get a diagonal-stripe border accent so they're
    distinguishable in a list without being so loud they overpower
    actually-unsealed entries. */

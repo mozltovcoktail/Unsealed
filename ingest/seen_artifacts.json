@@ -1,7 +1,12 @@
 {
   "aaro": [
+    "https://www.aaro.mil/Congressional-Press-Products/",
+    "https://www.aaro.mil/EFOIA-Reading-Room/",
+    "https://www.aaro.mil/Resources/",
+    "https://www.aaro.mil/UAP-Cases/Official-UAP-Imagery/",
     "https://www.aaro.mil/UAP-Cases/UAP-Case-Resolution-Reports/",
-    "https://www.aaro.mil/UAP-Cases/UAP-Reporting-Trends/"
+    "https://www.aaro.mil/UAP-Cases/UAP-Reporting-Trends/",
+    "https://www.aaro.mil/UAP-Records/"
   ],
   "frus": [
     "https://static.history.state.gov/frus/frus1861/ebook/frus1861.epub",
@@ -592,5 +597,26 @@
     "https://www.archives.gov/files/release-list-for-3rd-quarter-2025-excel-1.xlsx",
     "https://www.archives.gov/files/uploads/1st-quarter-fy-26-release-list-1.xlsx",
     "https://www.archives.gov/files/uploads/1st-quarter-release-list-2025-a.xlsx"
+  ],
+  "project_blue_book": [
+    "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=1&output=json",
+    "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=10&output=json",
+    "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=11&output=json",
+    "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=2&output=json",
+    "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=3&output=json",
+    "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=4&output=json",
+    "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=5&output=json",
+    "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=6&output=json",
+    "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=7&output=json",
+    "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=8&output=json",
+    "https://archive.org/advancedsearch.php?q=collection%3Aproject-blue-book&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=description&rows=1000&page=9&output=json"
+  ],
+  "uap_misc": [
+    "https://smd-cms.nasa.gov/wp-content/uploads/2023/09/uap-independent-study-team-final-report.pdf",
+    "https://www.navair.navy.mil/foia/sites/g/files/jejdrh591/files/2020-04/FLIR1.mp4",
+    "https://www.navair.navy.mil/foia/sites/g/files/jejdrh591/files/2020-04/GIMBAL.wmv",
+    "https://www.navair.navy.mil/foia/sites/g/files/jejdrh591/files/2020-04/GOFAST.wmv",
+    "https://www.odni.gov/files/ODNI/documents/assessments/Prelimary-Assessment-UAP-20210625.pdf",
+    "https://www.odni.gov/files/ODNI/documents/assessments/Unclassified-2022-Annual-Report-UAP.pdf"
   ]
 }

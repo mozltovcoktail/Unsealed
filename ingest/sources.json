@@ -111,10 +111,93 @@
     "collection_id_default": "AARO Public Releases",
     "_note": "aaro.mil is behind Akamai with JA3 TLS fingerprinting — vanilla requests gets 403. impersonate=chrome routes fetches through curl_cffi.",
     "impersonate": "chrome",
+    "topics": "UAP",
     "urls": [
       "https://www.aaro.mil/UAP-Cases/UAP-Case-Resolution-Reports/",
-      "https://www.aaro.mil/UAP-Cases/UAP-Reporting-Trends/"
+      "https://www.aaro.mil/UAP-Cases/UAP-Reporting-Trends/",
+      "https://www.aaro.mil/UAP-Cases/Official-UAP-Imagery/",
+      "https://www.aaro.mil/UAP-Records/",
+      "https://www.aaro.mil/EFOIA-Reading-Room/",
+      "https://www.aaro.mil/Congressional-Press-Products/",
+      "https://www.aaro.mil/Resources/"
     ]
+  },
+  "uap_misc": {
+    "agency": "ODNI",
+    "collection_id_default": "UAP Reports — ODNI / NASA / Navy / DoD",
+    "_note": "Curated list of declassified UAP reports & videos from ODNI, NASA, Navy and DoD outside AARO. Static list — these don't change.",
+    "topics": "UAP",
+    "entries": [
+      {
+        "title": "Preliminary Assessment: Unidentified Aerial Phenomena",
+        "agency": "ODNI",
+        "unsealed_date": "2021-06-25",
+        "source_url": "https://www.odni.gov/files/ODNI/documents/assessments/Prelimary-Assessment-UAP-20210625.pdf",
+        "collection_id": "ODNI UAP Annual Reports"
+      },
+      {
+        "title": "2022 Annual Report on Unidentified Aerial Phenomena",
+        "agency": "ODNI",
+        "unsealed_date": "2023-01-12",
+        "source_url": "https://www.odni.gov/files/ODNI/documents/assessments/Unclassified-2022-Annual-Report-UAP.pdf",
+        "collection_id": "ODNI UAP Annual Reports"
+      },
+      {
+        "title": "FLIR1 — F/A-18 'Tic Tac' UAP Footage (Nimitz Incident)",
+        "agency": "NAVY",
+        "unsealed_date": "2020-04-27",
+        "document_date": "2004-11-14",
+        "source_url": "https://www.navair.navy.mil/foia/sites/g/files/jejdrh591/files/2020-04/FLIR1.mp4",
+        "collection_id": "Navy Declassified UAP Footage",
+        "description": "USS Nimitz strike group encounter; declassified by Department of the Navy on 2020-04-27."
+      },
+      {
+        "title": "GIMBAL — F/A-18 UAP Footage",
+        "agency": "NAVY",
+        "unsealed_date": "2020-04-27",
+        "document_date": "2015-01-21",
+        "source_url": "https://www.navair.navy.mil/foia/sites/g/files/jejdrh591/files/2020-04/GIMBAL.wmv",
+        "collection_id": "Navy Declassified UAP Footage",
+        "description": "USS Theodore Roosevelt strike group encounter; declassified by Department of the Navy on 2020-04-27."
+      },
+      {
+        "title": "GOFAST — F/A-18 UAP Footage",
+        "agency": "NAVY",
+        "unsealed_date": "2020-04-27",
+        "document_date": "2015-01-21",
+        "source_url": "https://www.navair.navy.mil/foia/sites/g/files/jejdrh591/files/2020-04/GOFAST.wmv",
+        "collection_id": "Navy Declassified UAP Footage",
+        "description": "USS Theodore Roosevelt strike group encounter; declassified by Department of the Navy on 2020-04-27."
+      },
+      {
+        "title": "NASA UAP Independent Study Team — Final Report",
+        "agency": "NASA",
+        "unsealed_date": "2023-09-14",
+        "source_url": "https://smd-cms.nasa.gov/wp-content/uploads/2023/09/uap-independent-study-team-final-report.pdf",
+        "collection_id": "NASA UAP Independent Study"
+      }
+    ]
+  },
+  "project_blue_book": {
+    "agency": "USAF",
+    "collection_id_default": "Project Blue Book",
+    "_note": "USAF investigation of UFO reports, 1947-1969. Internet Archive hosts the full collection (~10,764 case files). Pulled via IA's advancedsearch API.",
+    "topics": "UAP",
+    "ia_collection": "project-blue-book"
+  },
+  "cia_ufo": {
+    "agency": "CIA",
+    "collection_id_default": "CIA UFO Collection",
+    "_note": "CIA's declassified UFO / UAP holdings — partial-CREST. Pulled from cia.gov/readingroom search-by-collection (UFO is its own collection). Precursor to full CREST parser.",
+    "topics": "UAP",
+    "crest_collection": "ufos-fact-fiction-and-or-fantasy"
+  },
+  "fbi_ufo": {
+    "agency": "FBI",
+    "collection_id_default": "FBI UFO Vault",
+    "_note": "FBI Vault's UFO category — Hottel Memo, Roswell-adjacent FOIA releases. Partial Vault parser; covers only the UFO topic for now.",
+    "topics": "UAP",
+    "vault_topic_url": "https://vault.fbi.gov/UFO"
   },
   "frus": {
     "agency": "STATE",

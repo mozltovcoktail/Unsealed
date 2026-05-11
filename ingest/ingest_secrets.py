@@ -99,6 +99,7 @@ class Record:
     source_artifact_url: str | None = None  # provenance
     is_sealed: int = 0  # 1 = record is on a candidate / pre-release list, not actually unsealed
     document_date: str | None = None  # doc's own creation date (FRUS: doc date; unsealed_date = volume pub date)
+    topics: str | None = None  # ',UAP,NUCLEAR,' — comma-delimited topic tags w/ leading+trailing commas
     content_hash: str = ""
 
     def __post_init__(self):
@@ -589,14 +590,28 @@ def _date_near(node) -> str:
 def parse_aaro(group_cfg: dict, limit: int | None, *, fetch_opts) -> tuple[list[Record], list[str]]:
     out: list[Record] = []
     artifacts: list[str] = []
+    group_topic = group_cfg.get("topics")
+    base_tags = topics_str(group_topic) if group_topic else None
+    seen_urls: set[str] = set()
     for hub in group_cfg["urls"]:
         artifacts.append(hub)
-        html = fetch(hub, **fetch_opts(is_hub=True))
+        try:
+            html = fetch(hub, **fetch_opts(is_hub=True))
+        except Exception as e:
+            print(f"  [aaro] skip hub {hub}: {e}", file=sys.stderr)
+            continue
         soup = BeautifulSoup(html, "html.parser")
         for a in soup.find_all("a", href=True):
             href = urljoin(hub, a["href"])
             if not href.lower().endswith(".pdf"):
                 continue
+            # Normalize: aaro.mil's templating sometimes emits 'https:/Portals/...'
+            # (single slash) for relative links. Drop those — they 404.
+            if href.startswith("https:/Portals") or href.startswith("http:/Portals"):
+                continue
+            if href in seen_urls:
+                continue
+            seen_urls.add(href)
             title = (a.get_text(strip=True) or Path(href).stem).strip()
             date = _date_near(a)
             out.append(
@@ -607,10 +622,259 @@ def parse_aaro(group_cfg: dict, limit: int | None, *, fetch_opts) -> tuple[list[
                     collection_id=group_cfg["collection_id_default"],
                     source_url=href,
                     source_artifact_url=hub,
+                    topics=base_tags,
                 )
             )
             if limit and len(out) >= limit:
                 return out, artifacts
+    return out, artifacts
+
+
+# ─── UAP misc parser (ODNI / NASA / Navy / DoD curated list) ───────
+def parse_uap_misc(group_cfg: dict, limit: int | None, *, fetch_opts) -> tuple[list[Record], list[str]]:
+    """Hard-coded UAP releases that don't have a clean listing page worth
+    scraping — ODNI annual reports, Navy declassified videos, NASA study,
+    etc. Drives off group_cfg['entries']."""
+    out: list[Record] = []
+    artifacts: list[str] = []
+    group_topic = group_cfg.get("topics")
+    tags = topics_str(group_topic) if group_topic else None
+    for e in group_cfg.get("entries", []):
+        out.append(
+            Record(
+                title=e["title"],
+                agency=e.get("agency") or group_cfg["agency"],
+                unsealed_date=e.get("unsealed_date") or "",
+                collection_id=e.get("collection_id") or group_cfg["collection_id_default"],
+                source_url=e["source_url"],
+                description=e.get("description"),
+                source_artifact_url=e.get("source_artifact_url") or e["source_url"],
+                document_date=e.get("document_date"),
+                topics=tags,
+            )
+        )
+        artifacts.append(e["source_url"])
+        if limit and len(out) >= limit:
+            break
+    return out, artifacts
+
+
+# ─── Project Blue Book — bulk-pull from Internet Archive ──────────
+def parse_project_blue_book(group_cfg: dict, limit: int | None, *, fetch_opts) -> tuple[list[Record], list[str]]:
+    """USAF Project Blue Book case files, mirrored on archive.org as the
+    `project-blue-book` collection (~10,764 items). Pulled via IA's
+    advancedsearch API in 1000-row pages. Records become curated entries
+    so they're indexed under our own FTS + topic system."""
+    out: list[Record] = []
+    artifacts: list[str] = []
+    collection = group_cfg["ia_collection"]
+    base_url = "https://archive.org/advancedsearch.php"
+    rows_per_page = 1000
+    page = 1
+    group_topic = group_cfg.get("topics")
+    tags = topics_str(group_topic) if group_topic else None
+    fields = ["identifier", "title", "date", "description"]
+    while True:
+        params = (
+            f"q=collection%3A{collection}&"
+            + "&".join(f"fl%5B%5D={f}" for f in fields)
+            + f"&rows={rows_per_page}&page={page}&output=json"
+        )
+        url = f"{base_url}?{params}"
+        artifacts.append(url)
+        text = fetch(url, **fetch_opts(is_hub=True))
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as e:
+            print(f"  [pbb] page {page} parse error: {e}", file=sys.stderr)
+            break
+        docs = (data.get("response") or {}).get("docs") or []
+        if not docs:
+            break
+        for d in docs:
+            ident = d.get("identifier")
+            if not ident:
+                continue
+            title = d.get("title") or ident
+            if isinstance(title, list):
+                title = title[0] if title else ident
+            raw_date = d.get("date")
+            if isinstance(raw_date, list):
+                raw_date = raw_date[0] if raw_date else ""
+            doc_date = _to_iso_date(str(raw_date or "")) or None
+            desc = d.get("description")
+            if isinstance(desc, list):
+                desc = " ".join(str(x) for x in desc if x)
+            if isinstance(desc, str):
+                desc = desc[:500]
+            out.append(
+                Record(
+                    title=str(title).strip(),
+                    agency=group_cfg["agency"],
+                    # PBB ran 1947-1969 and was declassified in 1976 when the
+                    # records were transferred to NARA. No per-case unsealing
+                    # date; use the doc's own date as a usable surrogate.
+                    unsealed_date=doc_date or "1976-01-01",
+                    document_date=doc_date,
+                    collection_id=group_cfg["collection_id_default"],
+                    source_url=f"https://archive.org/details/{ident}",
+                    description=desc or None,
+                    source_artifact_url=f"https://archive.org/details/{collection}",
+                    topics=tags,
+                )
+            )
+            if limit and len(out) >= limit:
+                return out, artifacts
+        if len(docs) < rows_per_page:
+            break
+        page += 1
+    return out, artifacts
+
+
+# ─── CIA UFO collection (precursor to full CREST parser) ──────────
+def parse_cia_ufo(group_cfg: dict, limit: int | None, *, fetch_opts) -> tuple[list[Record], list[str]]:
+    """CIA's UFO declassification collection on cia.gov/readingroom. The
+    collection slug 'ufos-fact-fiction-and-or-fantasy' gathers all docs CIA
+    has explicitly grouped under UFOs. Each result page has 10 docs; we
+    paginate by ?page=N."""
+    out: list[Record] = []
+    artifacts: list[str] = []
+    slug = group_cfg["crest_collection"]
+    group_topic = group_cfg.get("topics")
+    tags = topics_str(group_topic) if group_topic else None
+    page = 0
+    while True:
+        url = f"https://www.cia.gov/readingroom/collection/{slug}?page={page}"
+        artifacts.append(url)
+        try:
+            html = fetch(url, **fetch_opts(is_hub=True))
+        except Exception as e:
+            print(f"  [cia_ufo] page {page}: {e}", file=sys.stderr)
+            break
+        soup = BeautifulSoup(html, "html.parser")
+        rows = soup.select("div.row-item, article.search-result, .document-row, .views-row")
+        if not rows:
+            # Fall back: hunt for direct doc links matching the CREST URL pattern.
+            anchors = soup.find_all("a", href=re.compile(r"/readingroom/(?:document|docs)/"))
+            if not anchors:
+                break
+            rows = anchors
+        added_this_page = 0
+        for row in rows:
+            a = row if getattr(row, "name", None) == "a" else row.find("a", href=re.compile(r"/readingroom/"))
+            if not a:
+                continue
+            href = a.get("href")
+            if not href:
+                continue
+            doc_url = urljoin("https://www.cia.gov", href)
+            title = (a.get_text(strip=True) or Path(href).stem).strip()
+            if not title or len(title) < 3:
+                continue
+            # Try to pull a release date from sibling text.
+            ctx = row.get_text(" ", strip=True) if hasattr(row, "get_text") else ""
+            date_iso = ""
+            mdate = re.search(
+                r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{4}\b",
+                ctx, re.I,
+            )
+            if mdate:
+                date_iso = _frus_parse_dateline(mdate.group(0))
+            out.append(
+                Record(
+                    title=title,
+                    agency=group_cfg["agency"],
+                    unsealed_date=date_iso or "",
+                    collection_id=group_cfg["collection_id_default"],
+                    source_url=doc_url,
+                    source_artifact_url=url,
+                    topics=tags,
+                )
+            )
+            added_this_page += 1
+            if limit and len(out) >= limit:
+                return out, artifacts
+        if added_this_page == 0:
+            break
+        page += 1
+        if page > 200:  # hard safety
+            break
+    return out, artifacts
+
+
+# ─── FBI Vault UFO subset (precursor to full Vault parser) ────────
+def parse_fbi_ufo(group_cfg: dict, limit: int | None, *, fetch_opts) -> tuple[list[Record], list[str]]:
+    """FBI Vault's UFO topic page hosts the Hottel Memo and other FOIA
+    releases. Vault is Drupal — each topic page is a paginated listing of
+    files. We walk the listing and pull each entry's title + linked PDF(s)."""
+    out: list[Record] = []
+    artifacts: list[str] = []
+    hub = group_cfg["vault_topic_url"]
+    group_topic = group_cfg.get("topics")
+    tags = topics_str(group_topic) if group_topic else None
+    page = 0
+    seen_docs: set[str] = set()
+    while True:
+        url = hub if page == 0 else f"{hub}?page={page}"
+        artifacts.append(url)
+        try:
+            html = fetch(url, **fetch_opts(is_hub=True))
+        except Exception as e:
+            print(f"  [fbi_ufo] page {page}: {e}", file=sys.stderr)
+            break
+        soup = BeautifulSoup(html, "html.parser")
+        # Vault listing rows. Each row has a title link + a "Date Posted" cell.
+        rows = soup.select(
+            "table.foia-search-results tr, "
+            "div.foia-search-result, "
+            "div.views-row, "
+            "li.foia-document"
+        )
+        if not rows:
+            rows = soup.find_all("a", href=re.compile(r"/UFO/|\.pdf$", re.I))
+        added = 0
+        for row in rows:
+            a = row if getattr(row, "name", None) == "a" else row.find("a", href=True)
+            if not a:
+                continue
+            doc_url = urljoin(hub, a.get("href"))
+            if doc_url in seen_docs:
+                continue
+            seen_docs.add(doc_url)
+            title = (a.get_text(strip=True) or Path(doc_url).stem).strip()
+            if not title or len(title) < 3:
+                continue
+            ctx = row.get_text(" ", strip=True) if hasattr(row, "get_text") else ""
+            mdate = re.search(
+                r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b|\b(\d{4})-(\d{2})-(\d{2})\b",
+                ctx,
+            )
+            date_iso = ""
+            if mdate:
+                g = mdate.groups()
+                if g[0]:
+                    date_iso = f"{int(g[2]):04d}-{int(g[0]):02d}-{int(g[1]):02d}"
+                else:
+                    date_iso = f"{g[3]}-{g[4]}-{g[5]}"
+            out.append(
+                Record(
+                    title=title,
+                    agency=group_cfg["agency"],
+                    unsealed_date=date_iso or "",
+                    collection_id=group_cfg["collection_id_default"],
+                    source_url=doc_url,
+                    source_artifact_url=url,
+                    topics=tags,
+                )
+            )
+            added += 1
+            if limit and len(out) >= limit:
+                return out, artifacts
+        if added == 0:
+            break
+        page += 1
+        if page > 50:
+            break
     return out, artifacts
 
 
@@ -863,6 +1127,12 @@ PARSERS = {
     "nara_catalog": parse_nara_catalog,
     "aaro": parse_aaro,
     "frus": parse_frus,
+    "uap_misc": parse_uap_misc,
+    "project_blue_book": parse_project_blue_book,
+    # cia_ufo and fbi_ufo are deferred — both .gov sites serve Akamai Bot
+    # Manager JS challenges that curl_cffi can't solve. They need a real
+    # JS-executing browser (Playwright). Marked BLOCKED in SOURCES.md
+    # until we onboard Playwright. Parser code retained above for revival.
     # dow_uap intentionally absent until a verified source URL exists.
 }
 
@@ -886,12 +1156,12 @@ def emit_sql(group: str, records: list[Record], seen_hashes: set[str] | None = N
                 "INSERT OR IGNORE INTO records "
                 "(title, agency, unsealed_date, collection_id, source_url, "
                 "description, thumbnail_url, source_artifact_url, is_sealed, "
-                "document_date, ingest_run_id, content_hash) "
+                "document_date, topics, ingest_run_id, content_hash) "
                 "VALUES ("
                 f"{_q(r.title)}, {_q(r.agency)}, {_q(r.unsealed_date)}, {_q(r.collection_id)}, "
                 f"{_q(r.source_url)}, {_q(r.description)}, {_q(r.thumbnail_url)}, "
                 f"{_q(r.source_artifact_url)}, {int(r.is_sealed)}, "
-                f"{_q(r.document_date)}, {_q(RUN_ID)}, {_q(r.content_hash)}"
+                f"{_q(r.document_date)}, {_q(r.topics)}, {_q(RUN_ID)}, {_q(r.content_hash)}"
                 ");\n"
             )
     return out_path
@@ -901,6 +1171,36 @@ def _q(v: str | None) -> str:
     if v is None or v == "":
         return "NULL"
     return "'" + str(v).replace("'", "''") + "'"
+
+
+# ─── Topic tagging ────────────────────────────────────────────────
+def topics_str(*tags: str) -> str | None:
+    """Build a ',TAG1,TAG2,' delimited string from individual tags. Empty
+    inputs return None so the column stays NULL in D1."""
+    clean = sorted({t.strip().upper().replace(" ", "_") for t in tags if t and t.strip()})
+    if not clean:
+        return None
+    return "," + ",".join(clean) + ","
+
+
+# Keyword detector for cross-agency UAP tagging. Words are matched as whole
+# tokens against title + description + collection_id. Conservative — false
+# positives bias toward "tag it anyway" since users can always re-search.
+_UAP_KEYWORD_RX = re.compile(
+    r"\b(uap|ufo|unidentified\s+(?:flying|aerial|anomalous)|"
+    r"anomalous\s+(?:aerial|atmospheric)|"
+    r"project\s+blue\s*book|project\s+sign|project\s+grudge|"
+    r"aatip|aawsap|kona\s*blue|tic[\s-]*tac|gimbal|gofast)\b",
+    re.I,
+)
+
+
+def detect_uap_topic(*text_fields: str | None) -> bool:
+    """True if any of the supplied text fields mention a UAP-related term."""
+    for t in text_fields:
+        if t and _UAP_KEYWORD_RX.search(t):
+            return True
+    return False
 
 
 # ─── CLI ──────────────────────────────────────────────────────────
@@ -962,8 +1262,15 @@ def main() -> int:
             print(f"[{g}] no parser registered — skipping", file=sys.stderr)
             report["groups"][g] = {"status": "skipped_no_parser"}
             continue
-        if not (cfg[g].get("urls") or cfg[g].get("queries")):
-            print(f"[{g}] no urls/queries configured — skipping", file=sys.stderr)
+        # Group must have at least one driver field. urls / queries are the
+        # most common; some parsers drive off other shapes (entries=hard-coded
+        # list, ia_collection=IA bulk, crest_collection=CIA collection slug,
+        # vault_topic_url=FBI Vault topic). Skip only if NONE of these exist.
+        if not any(cfg[g].get(k) for k in (
+            "urls", "queries", "entries",
+            "ia_collection", "crest_collection", "vault_topic_url",
+        )):
+            print(f"[{g}] no source config — skipping", file=sys.stderr)
             report["groups"][g] = {"status": "skipped_no_urls"}
             continue
         print(f"[{g}] parsing...", file=sys.stderr)

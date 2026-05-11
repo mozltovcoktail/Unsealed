@@ -17,6 +17,12 @@ export const onRequestGet = async ({ request, env }) => {
   const q = (url.searchParams.get('q') || '').trim();
   const filter = url.searchParams.get('source'); // null = all sources
   const includeSealed = url.searchParams.get('include_sealed') === '1';
+  // Topic filter: ?topic=UAP (or comma-separated ?topic=UAP,NUCLEAR).
+  // Server normalizes to upper-case, splits on comma.
+  const topicParam = (url.searchParams.get('topic') || '').trim();
+  const topics = topicParam
+    ? topicParam.split(',').map((t) => t.trim().toUpperCase()).filter(Boolean)
+    : [];
   const limit = Math.min(
     parseInt(url.searchParams.get('limit') || String(PER_SOURCE_LIMIT_DEFAULT), 10),
     50,
@@ -27,7 +33,7 @@ export const onRequestGet = async ({ request, env }) => {
   const all = [
     { id: 'ia',      run: () => fetchInternetArchive(q, limit) },
     { id: 'ntrs',    run: () => fetchNTRS(q, limit) },
-    { id: 'curated', run: () => fetchCurated(q, limit, env, { includeSealed }) },
+    { id: 'curated', run: () => fetchCurated(q, limit, env, { includeSealed, topics }) },
   ];
   const wanted = filter ? all.filter((s) => s.id === filter) : all;
 
@@ -134,7 +140,7 @@ async function fetchNTRS(q, limit) {
 }
 
 // ─── Curated (D1 FTS5) ─────────────────────────────────────────────────
-async function fetchCurated(q, limit, env, { includeSealed = false } = {}) {
+async function fetchCurated(q, limit, env, { includeSealed = false, topics = [] } = {}) {
   const ftsQuery = toFtsQuery(q);
   if (!ftsQuery) {
     return { id: 'curated', name: SOURCE_LABEL.curated, total: 0, results: [] };
@@ -143,17 +149,35 @@ async function fetchCurated(q, limit, env, { includeSealed = false } = {}) {
   // but not actually released. Hidden by default; the UI exposes a toggle
   // that flips include_sealed=1.
   const sealedFilter = includeSealed ? '' : 'AND r.is_sealed = 0';
+
+  // Topic filter: any-of (OR across topics). The column stores ',TAG1,TAG2,'
+  // so we LIKE-match '%,TAG,%'. Sanitize tags to uppercase alphanum+_ before
+  // splicing into SQL — safe even though we also bind elsewhere because we
+  // need each tag as its own bind parameter.
+  const cleanTopics = topics
+    .map((t) => String(t || '').toUpperCase().replace(/[^A-Z0-9_]/g, ''))
+    .filter(Boolean);
+  let topicFilter = '';
+  const topicBinds = [];
+  if (cleanTopics.length > 0) {
+    const ors = cleanTopics.map(() => `r.topics LIKE ?`).join(' OR ');
+    topicFilter = `AND (${ors})`;
+    for (const t of cleanTopics) topicBinds.push(`%,${t},%`);
+  }
+
   const sql = `
     SELECT r.id, r.title, r.agency, r.unsealed_date, r.document_date, r.collection_id,
-           r.source_url, r.description, r.thumbnail_url, r.is_sealed,
+           r.source_url, r.description, r.thumbnail_url, r.is_sealed, r.topics,
            bm25(records_fts, 3.0, 1.0, 0.5) AS rank
     FROM records_fts
     JOIN records r ON r.id = records_fts.rowid
-    WHERE records_fts MATCH ?1 ${sealedFilter}
+    WHERE records_fts MATCH ?1 ${sealedFilter} ${topicFilter}
     ORDER BY rank
-    LIMIT ?2
+    LIMIT ?
   `;
-  const { results } = await env.DB.prepare(sql).bind(ftsQuery, limit).all();
+  const { results } = await env.DB.prepare(sql)
+    .bind(ftsQuery, ...topicBinds, limit)
+    .all();
   return {
     id: 'curated',
     name: SOURCE_LABEL.curated,
@@ -169,8 +193,15 @@ async function fetchCurated(q, limit, env, { includeSealed = false } = {}) {
       description: r.description,
       thumbnail_url: r.thumbnail_url,
       is_sealed: r.is_sealed === 1,
+      topics: parseTopics(r.topics),
     })),
   };
+}
+
+// Parse ',UAP,NUCLEAR,' → ['UAP', 'NUCLEAR']
+function parseTopics(s) {
+  if (!s || typeof s !== 'string') return [];
+  return s.split(',').map((t) => t.trim()).filter(Boolean);
 }
 
 function toFtsQuery(raw) {

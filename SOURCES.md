@@ -55,7 +55,7 @@ These are the next big rocks. Each is in scope, scrape-friendly, and adds 100k+ 
 | # | Source | Agency | Status | Access | Est. volume | Notes |
 |---|---|---|:---:|---|---:|---|
 | 2.1 | **CIA FOIA Reading Room (CREST)** — IA mirror | CIA | ✅ | IA `collection:cia-collection` (federated at query time) | 377,846 records | `cia` source in `/api/search`. Includes the entire CREST CIA-RDP* corpus (274,825 docs) + ~103k other CIA records. Zero D1 cost. The direct cia.gov scrape is still blocked by Akamai Bot Manager (parser stub `parse_cia_ufo` retained for a future Playwright pass to capture cia.gov-only Special Collections — JFK, Studies in Intelligence, etc.). |
-| 2.2 | **FBI Vault** | FBI | ⚫ | Akamai Bot Manager (suspected) | ~100k docs | `vault.fbi.gov`. 403s with curl_cffi+chrome impersonate. Same Playwright dependency as CREST. Parser stub (`parse_fbi_ufo`) retained. |
+| ~~2.2~~ | ~~**FBI Vault**~~ | ~~FBI~~ | ⚪ | — | ~~~100k docs~~ | **MOVED TO §5 OUT OF SCOPE 2026-05-11.** `vault.fbi.gov` deploys active anti-bot challenges — defeating them violates the bot-protection rule in [CONTEXT.md](CONTEXT.md). Reach via IA federation where mirrored, or skip. |
 | 2.3 | **State Virtual Reading Room** | State | 🔵 | Search API, paginated | ~100k docs | `foia.state.gov`. Hillary Clinton emails, Kissinger cables, ongoing FOIA releases. |
 | 2.4 | **DOE OpenNet** | DOE | 🔵 | Search API at `osti.gov/opennet` | ~500k records | DOE/AEC declassified nuclear-related records. |
 | 2.5 | **NSA Declassified Documents** | NSA | 🔵 | HTML scrape | small (<10k) | `nsa.gov/news-features/declassified-documents`. High-prestige releases (VENONA, BOURBON, etc.). |
@@ -107,6 +107,8 @@ These were public-by-default from day one. UNSEALED's brand is records that *wer
 | Mary Ferrell Foundation | Non-gov, JFK-focused. Their digitizations have explicit "personal use" notices. |
 | HathiTrust | Largely public-domain gov docs but the platform itself has access controls and a research-use agreement. |
 | Any actually-classified material | Out of scope by definition. We index what the agency chose to publish. |
+| **FBI Vault** (`vault.fbi.gov`) — direct scrape | Active anti-bot challenges = clear "humans only" signal per CONTEXT.md rule (2026-05-11). Parser stub `parse_fbi_ufo` retained in case the host policy changes or an IA mirror covers the content; do not enable. |
+| **CIA cia.gov/readingroom** — direct scrape | Active Akamai Bot Manager JS challenge. Covered instead via IA federation (`collection:cia-collection`, 377,846 records) per row 2.1. Direct scrape stays excluded. |
 
 ---
 
@@ -118,6 +120,7 @@ These were public-by-default from day one. UNSEALED's brand is records that *wer
 - **2026-05-11 — UAP sprint:** detour from sequential parser order to pull all UAP-related sources in one push. Delivered AARO expansion (54), Project Blue Book bulk-pull (10,000), and a UAP misc group (6). Total 10,060 UAP-tagged records.
 - **2026-05-11 — Topic tagging system:** schema migration 005 added `records.topics TEXT` column (`,TAG1,TAG2,` delimited). General mechanism — drop-in for future `NUCLEAR`, `VIETNAM`, `CIVIL_RIGHTS` etc. toggles. UI exposes a `+ UAP` toggle alongside `+ SEALED`.
 - **2026-05-11 — Playwright is now blocking work:** both CIA CREST and FBI Vault serve Akamai Bot Manager JS challenges that defeat curl_cffi. The §2 priority order needs Playwright integration to proceed past §2.1.
+- **2026-05-11 — Bot-protection respect codified in CONTEXT.md:** active anti-bot signals (Akamai Bot Manager, Cloudflare Turnstile, reCAPTCHA, JS interstitials, behavioral analysis, CAPTCHAs) are treated as a "humans only" signal — same posture as robots.txt. **CIA cia.gov/readingroom and FBI Vault both moved from ⚫ BLOCKED to ⚪ OUT OF SCOPE.** CIA CREST content reaches us via IA federation (377k records); FBI Vault content stays unreachable unless an IA mirror surfaces.
 - **2026-05-11 — Additions to queue:** DTIC and Presidential Libraries added to §2, NSA Cryptologic History / CIA CSI / Naval History / AFHRA / Army CMH / ISCAP / PIDB added to §3. CIA CREST remains next per brand-fit priority.
 - **2026-05-11 — Steady-state quota fix:** ingester loads `ingest/seen_hashes.json` (set of content_hashes already in D1, refreshed once per run from `SELECT content_hash FROM records`) and skips re-emitting them. Keeps weekly re-ingest inside D1 Workers Free 100k writes/day even as the corpus grows.
 

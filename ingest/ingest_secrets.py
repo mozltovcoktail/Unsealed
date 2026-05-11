@@ -70,12 +70,14 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 SEEN_ARTIFACTS_FILE = ROOT / "ingest" / "seen_artifacts.json"
 SEEN_HASHES_FILE = ROOT / "ingest" / "seen_hashes.json"
 
-USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-    "Version/17.4 Safari/605.1.15"
-)
+USER_AGENT = "UNSEALED-bot/0.4 (+https://github.com/mozltovcoktail/Unsealed)"
 FROM_HEADER = "unsealed-bot@github.com/mozltovcoktail/Unsealed"
+# Hosts that JA3-fingerprint and 403 our normal-browser-shaped requests
+# (Akamai WAFs that flag non-Chrome TLS handshakes) are handled via the
+# per-source `impersonate` flag in sources.json — that routes the fetch
+# through curl_cffi which emits a real-Chrome TLS handshake. We do NOT
+# spoof Safari/Chrome UAs from this default header to humans-only sites;
+# see CONTEXT.md "ethical, legal, no agency trouble" section.
 TIMEOUT = 30
 
 # Default cache TTL: hub pages get 7 days (we want to see new releases),
@@ -122,6 +124,85 @@ def _cache_paths(url: str, binary: bool) -> tuple[Path, Path]:
 
 _LAST_FETCH_AT: dict[str, float] = {}
 
+# ─── robots.txt enforcement ───────────────────────────────────────
+# Per CONTEXT.md, Disallow rules are a HARD rule — not a suggestion.
+# We fetch /robots.txt once per host per process, parse User-agent: *
+# rules, and refuse any fetch() that would hit a disallowed path.
+_ROBOTS_CACHE: dict[str, list[tuple[bool, str]]] = {}  # host → [(allow_bool, path_pattern), ...]
+
+
+def _load_robots(host: str) -> list[tuple[bool, str]]:
+    """Fetch and parse /robots.txt for `host`. Returns the User-agent: *
+    rules as a list of (allow, path_pattern) tuples in source order."""
+    if host in _ROBOTS_CACHE:
+        return _ROBOTS_CACHE[host]
+    rules: list[tuple[bool, str]] = []
+    try:
+        r = requests.get(
+            f"https://{host}/robots.txt",
+            headers={"user-agent": USER_AGENT, "From": FROM_HEADER},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            _ROBOTS_CACHE[host] = []
+            return []
+        body = r.text
+    except Exception as e:
+        print(f"  [robots] {host}: fetch failed ({e}); treating as Allow", file=sys.stderr)
+        _ROBOTS_CACHE[host] = []
+        return []
+    # Parse: only the User-agent: * group matters for our bot.
+    in_star_group = False
+    for raw in body.splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key = key.strip().lower()
+        val = val.strip()
+        if key == "user-agent":
+            in_star_group = val == "*"
+            continue
+        if not in_star_group:
+            continue
+        if key == "disallow":
+            rules.append((False, val))
+        elif key == "allow":
+            rules.append((True, val))
+    _ROBOTS_CACHE[host] = rules
+    return rules
+
+
+def _robots_allowed(url: str) -> tuple[bool, str]:
+    """Return (allowed, matching_rule_path). Used as a hard gate in fetch()."""
+    p = urlparse(url)
+    host = p.netloc
+    path = p.path or "/"
+    rules = _load_robots(host)
+    # robots.txt semantic: longest-match wins; if multiple same-length, Allow
+    # beats Disallow. We approximate that by checking longest-match first.
+    best: tuple[bool, str] | None = None
+    for allow, pat in rules:
+        if not pat:
+            # Empty Disallow == allow everything in that group's scope.
+            if not allow:
+                continue
+        # Convert robots.txt path to a simple prefix/glob match.
+        # Robots.txt supports * and $ — minimal handling sufficient here.
+        regex = re.escape(pat).replace(r"\*", ".*")
+        if pat.endswith("$"):
+            regex = regex[:-2] + "$"
+        if re.match(regex, path):
+            if best is None or len(pat) > len(best[1]):
+                best = (allow, pat)
+            elif len(pat) == len(best[1]) and allow and not best[0]:
+                best = (allow, pat)
+    if best is None:
+        return True, ""
+    return best[0], best[1]
+
 
 def fetch(
     url: str,
@@ -139,6 +220,14 @@ def fetch(
         max_age = ttl_sec if ttl_sec is not None else DEFAULT_HUB_TTL_SEC
         if max_age <= 0 or age < max_age:
             return cache.read_bytes() if binary else cache.read_text("utf-8", "replace")
+    # robots.txt is a hard gate (CONTEXT.md rule #2). Refuse before any
+    # network call if the path is Disallow'd for User-agent: *.
+    allowed, rule = _robots_allowed(url)
+    if not allowed:
+        raise RuntimeError(
+            f"robots.txt disallows this URL (rule: 'Disallow: {rule}'). "
+            f"Skipping per CONTEXT.md ethical compliance. URL: {url}"
+        )
     # Polite rate-limit: honor per-host crawl-delay between non-cached requests.
     if crawl_delay_sec > 0:
         host = urlparse(url).netloc
@@ -1261,6 +1350,11 @@ def main() -> int:
         if g not in PARSERS:
             print(f"[{g}] no parser registered — skipping", file=sys.stderr)
             report["groups"][g] = {"status": "skipped_no_parser"}
+            continue
+        if cfg[g].get("suspended"):
+            reason = str(cfg[g]["suspended"])[:200]
+            print(f"[{g}] SUSPENDED — {reason}", file=sys.stderr)
+            report["groups"][g] = {"status": "suspended", "reason": reason}
             continue
         # Group must have at least one driver field. urls / queries are the
         # most common; some parsers drive off other shapes (entries=hard-coded

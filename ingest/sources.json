@@ -3,6 +3,8 @@
   "nara_ndc": {
     "agency": "NARA",
     "collection_id_default": "National Declassification Center",
+    "_note": "archives.gov robots.txt asks for Crawl-delay: 10 — honored via fetch() per-host tracker.",
+    "crawl_delay_sec": 10,
     "urls": [
       "https://www.archives.gov/declassification/ndc/release-lists",
       "https://www.archives.gov/declassification/ndc",
@@ -71,6 +73,7 @@
     "agency": "NARA",
     "collection_id_default": "NARA Catalog",
     "_note": "Uses the NARA Catalog API. Each entry is one search query with a row cap; the ingester runs them all and dedupes by NAID.",
+    "suspended": "catalog.archives.gov robots.txt is User-agent: * / Disallow: / (2026-05-11). API auth implies programmatic access is intended, but robots.txt is ambiguous. Awaiting explicit confirmation from NARA Catalog API team — email drafted, see SOURCES.md decisions log.",
     "queries": [
       {
         "q": "declassified",
@@ -202,7 +205,8 @@
   "frus": {
     "agency": "STATE",
     "collection_id_default": "Foreign Relations of the United States",
-    "_note": "FRUS — declassified diplomatic record, 1861-1989+. Bulk EPUBs at static.history.state.gov. robots.txt requires 20s crawl-delay; one-time bulk import is ~3hr, then steady-state ~zero (FRUS publishes 1-3 volumes/year).",
+    "_note": "FRUS — declassified diplomatic record, 1861-1989+. Bulk EPUBs at static.history.state.gov.",
+    "suspended": "static.history.state.gov serves User-agent: * / Disallow: / (discovered in audit 2026-05-11). 313,257 previously-ingested FRUS records were deleted from D1 the same day. The parent domain history.state.gov publishes the EPUB links explicitly, but per CONTEXT.md we honor the more restrictive signal. Awaiting reply from history.state.gov webmaster — email drafted, see SOURCES.md decisions log.",
     "impersonate": "chrome",
     "crawl_delay_sec": 20,
     "urls": [

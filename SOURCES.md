@@ -41,10 +41,12 @@ Brand strap (`index.html`) currently reads "RECENTLY DECLASSIFIED" — outdated 
 |---|---|---|:---:|---|---|
 | 1.1 | NARA NDC quarterly release lists | NARA | ✅ | HTML hubs → .xlsx artifacts | `nara_ndc` group. ~11k records live. Auto-discovery (`discover.yml`) finds new release lists. |
 | 1.2 | NARA Catalog API (`catalog.archives.gov/api/v2`) | NARA | 🟡 | REST API (key required) | `nara_catalog` group. Parser written; awaiting `NARA_API_KEY` repo secret. Free tier: 10k queries/month. Email sent to `Catalog_API@nara.gov` 2026-05-10. |
-| 1.3 | AARO UAP cases & reports | AARO | ✅ | HTML scrape (curl_cffi) | `aaro` group. 11 records live as of 2026-05-10. Akamai TLS-fingerprinting required curl_cffi escalation. |
+| 1.3 | AARO UAP cases & reports | AARO | ✅ | HTML scrape (curl_cffi) | `aaro` group. **54 records** live as of 2026-05-11 across 7 sub-sections (Case Resolutions, Reporting Trends, Official Imagery, UAP-Records, EFOIA Reading Room, Congressional Press Products, Resources). All tagged `topics=UAP`. |
 | 1.4 | NASA NTRS | NASA | ✅ | REST API (federated at query time) | `/api/search` federates against `ntrs.nasa.gov/api`. Not ingested into D1 — live federation. |
 | 1.5 | Internet Archive — National Security Archive collection | (IA mirror of CIA/NSA/etc.) | ✅ | IA advanced-search API (federated) | ~2.4M docs. Federated, not ingested. |
 | 1.6 | **State FRUS** (1861–1989+) | State | ✅ | Bulk EPUB downloads + GitHub TEI mirror for pub dates | `frus` group. **313,257 records live in D1** as of 2026-05-11 (548 of 551 volumes; 3 EPUBs still 30s-timeout, low priority). |
+| 1.7 | **Project Blue Book** (USAF UFO investigation 1947–69) | USAF | ✅ | IA `project-blue-book` collection via advancedsearch API | `project_blue_book` group. **10,000 of 10,764 records** live (IA search caps at 10k/query; remainder is a cursor-pagination follow-up). All tagged `topics=UAP`. |
+| 1.8 | **UAP misc** — ODNI / Navy / NASA | ODNI / Navy / NASA | ✅ | Hard-coded static list | `uap_misc` group. **6 records**: ODNI Preliminary UAP Assessment 2021, ODNI 2022 Annual Report, FLIR1/Gimbal/GoFast Navy videos, NASA UAP Independent Study 2023. All tagged `topics=UAP`. |
 
 ## 2. Federal — high-priority queue
 
@@ -52,8 +54,8 @@ These are the next big rocks. Each is in scope, scrape-friendly, and adds 100k+ 
 
 | # | Source | Agency | Status | Access | Est. volume | Notes |
 |---|---|---|:---:|---|---:|---|
-| 2.1 | **CIA FOIA Reading Room (CREST)** | CIA | 🔵 | HTML scrape + search JSON | ~13M pages | Highest brand-fit. `cia.gov/readingroom`. Robots-friendly, has its own search backend. **NEXT.** |
-| 2.2 | **FBI Vault** | FBI | 🔵 | HTML scrape (Drupal) | ~100k docs | `vault.fbi.gov`. Topic-organized lists, predictable URLs. |
+| 2.1 | **CIA FOIA Reading Room (CREST)** | CIA | ⚫ | Akamai Bot Manager JS challenge | ~13M pages | Highest brand-fit. `cia.gov/readingroom`. Initial attempt 2026-05-11 hit `bm-verify` JS challenge that curl_cffi can't solve. Needs Playwright integration. Parser stub (`parse_cia_ufo`) retained. **NEXT after Playwright.** |
+| 2.2 | **FBI Vault** | FBI | ⚫ | Akamai Bot Manager (suspected) | ~100k docs | `vault.fbi.gov`. 403s with curl_cffi+chrome impersonate. Same Playwright dependency as CREST. Parser stub (`parse_fbi_ufo`) retained. |
 | 2.3 | **State Virtual Reading Room** | State | 🔵 | Search API, paginated | ~100k docs | `foia.state.gov`. Hillary Clinton emails, Kissinger cables, ongoing FOIA releases. |
 | 2.4 | **DOE OpenNet** | DOE | 🔵 | Search API at `osti.gov/opennet` | ~500k records | DOE/AEC declassified nuclear-related records. |
 | 2.5 | **NSA Declassified Documents** | NSA | 🔵 | HTML scrape | small (<10k) | `nsa.gov/news-features/declassified-documents`. High-prestige releases (VENONA, BOURBON, etc.). |
@@ -113,6 +115,9 @@ These were public-by-default from day one. UNSEALED's brand is records that *wer
 - **2026-05-10 — Brand scope:** previously-classified only, no time bound (§1+§2+§3 in, §4 out, CRS moved to §5). Strap text in `index.html` likely wants a rewrite to drop "RECENTLY" — TBD.
 - **2026-05-10 — Parser order:** **State FRUS → CIA CREST → FBI Vault → DOE OpenNet → NSA Declass → ODNI**, then §3 long tail.
 - **2026-05-10 — Aggregators:** keep §5 excluded. No outreach to GWU NSArchive / MuckRock / Black Vault for v1.
+- **2026-05-11 — UAP sprint:** detour from sequential parser order to pull all UAP-related sources in one push. Delivered AARO expansion (54), Project Blue Book bulk-pull (10,000), and a UAP misc group (6). Total 10,060 UAP-tagged records.
+- **2026-05-11 — Topic tagging system:** schema migration 005 added `records.topics TEXT` column (`,TAG1,TAG2,` delimited). General mechanism — drop-in for future `NUCLEAR`, `VIETNAM`, `CIVIL_RIGHTS` etc. toggles. UI exposes a `+ UAP` toggle alongside `+ SEALED`.
+- **2026-05-11 — Playwright is now blocking work:** both CIA CREST and FBI Vault serve Akamai Bot Manager JS challenges that defeat curl_cffi. The §2 priority order needs Playwright integration to proceed past §2.1.
 - **2026-05-11 — Additions to queue:** DTIC and Presidential Libraries added to §2, NSA Cryptologic History / CIA CSI / Naval History / AFHRA / Army CMH / ISCAP / PIDB added to §3. CIA CREST remains next per brand-fit priority.
 - **2026-05-11 — Steady-state quota fix:** ingester loads `ingest/seen_hashes.json` (set of content_hashes already in D1, refreshed once per run from `SELECT content_hash FROM records`) and skips re-emitting them. Keeps weekly re-ingest inside D1 Workers Free 100k writes/day even as the corpus grows.
 

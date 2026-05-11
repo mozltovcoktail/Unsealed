@@ -2,6 +2,34 @@
 
 Brutalist mobile-first search across recently declassified U.S. government records. Vite + vanilla JS frontend, Cloudflare Pages Functions for API, Cloudflare D1 (SQLite + FTS5) for storage.
 
+## ⚠️ Hard rule: ethical, legal, no agency trouble
+
+**Every technique, parser, ingest path, and deployment decision on UNSEALED MUST be:**
+
+1. **Legal.** No CFAA / DMCA / state computer-fraud exposure. No copyright infringement (federal works are public domain — that's our basis; third-party compilations are NOT). No violation of any agency's enforceable Terms of Service.
+2. **Ethical.** When a publishing agency signals "humans only" through active anti-bot challenges (Akamai Bot Manager, Cloudflare Turnstile, reCAPTCHA, JS interstitials, etc.), **we do not circumvent that signal** — even if it's technically possible and probably not illegal. Same posture as `robots.txt`: a clear "do not crawl this way" gets respected.
+3. **Non-antagonistic to U.S. government agencies, federal or state.** Nothing UNSEALED does should give a federal or state agency a reason to send a cease-and-desist, file a CFAA complaint, refer the project to law enforcement, or even publicly complain. The whole pitch is "this material is supposed to be public; we make it easier to find" — that only works if every source we touch agrees we're being a polite citizen, not an adversarial actor.
+
+**What this means concretely:**
+
+| ✅ OK | ❌ NOT OK |
+|---|---|
+| Respecting robots.txt crawl-delay (e.g. 20s on history.state.gov) | Ignoring robots.txt to go faster |
+| `curl_cffi` to defeat passive TLS-fingerprint false-positives (aaro.mil case) | Playwright / headless Chrome to solve **active JS bot challenges** (CIA CREST, FBI Vault) |
+| Identifying ourselves with `From: unsealed-bot@github.com/...` | Spoofing identity / pretending to be a different bot or human user |
+| Bulk EPUB downloads where the publisher publishes EPUBs for bulk download (FRUS) | Bulk-scraping a paginated search UI that was never meant to serve bulk traffic |
+| Public-domain federal works (17 USC §105) — copy freely | Third-party aggregators' curated compilations (GWU NSArchive, MuckRock, Black Vault) without per-source ToS check |
+| FOIA-released documents the agency chose to publish | Material the agency clearly didn't intend to be public (leaked, draft, or still-classified docs) |
+| NARA Catalog API, IA advancedsearch API, GitHub raw — APIs explicitly built for programmatic access | APIs gated by ToS that disallow bulk programmatic use we haven't obtained permission for |
+
+**When in doubt:** assume the more restrictive interpretation. Use FOIA, NARA Catalog API, IA federation, or skip the source entirely. There is always another path to the underlying public-domain content; never the path that involves circumventing an agency's clearly-deployed "humans only" signal.
+
+**Sources that hit this rule become ⚪ OUT OF SCOPE in [SOURCES.md](SOURCES.md), not 🔵 QUEUED.** As of 2026-05-11 this applies to CIA CREST (`cia.gov/readingroom` — Akamai Bot Manager JS challenge) and FBI Vault (`vault.fbi.gov` — same). Content overlap is reachable via the IA / NSArchive federation we already do plus NARA Catalog API once we have the key.
+
+**No reputational risk takes:** UNSEALED is a public open-source project with Aaron's name on it. "UNSEALED bypasses CIA bot protection" is a worse headline than "UNSEALED indexes the same content via NARA's open API" — even if the technical achievement is the same and the legal exposure is the same (negligible). The framing matters.
+
+---
+
 ## Why this stack
 - **D1 over self-hosted SQLite**: native FTS5, free tier covers our scale (500MB cap), single binding from Pages Functions, no second deploy target.
 - **Vite vanilla JS**: matches the rest of Aaron's portfolio (CardVault / Colorbolt / Neutralize / Zero Views all on this exact stack).

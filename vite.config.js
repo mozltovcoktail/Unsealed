@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 
 // Port 5184 — 5183 was taken by LiveyCammy. Update ~/.claude/CLAUDE.md registry.
 export default defineConfig({
+  base: './',
   server: {
     port: 5184,
     strictPort: true,

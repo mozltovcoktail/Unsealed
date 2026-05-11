@@ -214,6 +214,11 @@ a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
   font-weight: 700;
   letter-spacing: 0.22em;
 }
+/* DOC pill — original document date, when distinct from the unsealed
+   (release-to-public) date. Dashed border to read as secondary. */
+.record__pill--doc-date {
+  border-style: dashed !important;
+}
 /* Sealed records get a diagonal-stripe border accent so they're
    distinguishable in a list without being so loud they overpower
    actually-unsealed entries. */

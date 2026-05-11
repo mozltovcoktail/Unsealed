@@ -1,0 +1,9 @@
+name = "unsealed-proxy"
+main = "unsealed-proxy.js"
+compatibility_date = "2025-01-01"
+account_id = "54f2aa18e5640b292153a63e7f9e6878"
+
+routes = [
+  { pattern = "airpiehi.com/unsealed", zone_id = "a9c28184626835492effa6ffb03915bb" },
+  { pattern = "airpiehi.com/unsealed/*", zone_id = "a9c28184626835492effa6ffb03915bb" },
+]

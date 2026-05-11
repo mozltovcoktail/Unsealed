@@ -55,7 +55,7 @@ async function runSearch() {
   if (state.includeSealed) params.set('include_sealed', '1');
 
   try {
-    const r = await fetch(`/api/search?${params}`, { signal: inflightCtrl.signal });
+    const r = await fetch(`api/search?${params}`, { signal: inflightCtrl.signal });
     if (!r.ok) throw new Error(`status ${r.status}`);
     const data = await r.json();
     state.responseSources = data.sources || [];
@@ -138,7 +138,7 @@ function buildRecord(rec) {
   img.alt = '';
   img.loading = 'lazy';
   // For federated results, hot-link directly; curated:* falls back to /api/thumb.
-  img.src = rec.thumbnail_url || `/api/thumb?id=${encodeURIComponent(stripPrefix(rec.id))}`;
+  img.src = rec.thumbnail_url || `api/thumb?id=${encodeURIComponent(stripPrefix(rec.id))}`;
   img.addEventListener('error', () => { img.src = CLASSIFIED_FOLDER_SVG; }, { once: true });
   thumbWrap.appendChild(img);
 
@@ -148,10 +148,15 @@ function buildRecord(rec) {
   const meta = document.createElement('div');
   meta.className = 'record__meta';
   // Filter null/undefined — Element.append(null) stringifies to "null".
+  // Show document_date only when it's distinct from unsealed_date (else
+  // it's redundant — true for sources where both fields are the same).
+  const showDocDate =
+    rec.document_date && rec.document_date !== rec.unsealed_date;
   const metaPills = [
     rec.is_sealed ? span('SEALED', 'record__pill--sealed') : null,
     span(rec.agency || 'UNKNOWN'),
-    span(rec.is_sealed ? 'NOT YET UNSEALED' : rec.unsealed_date),
+    span(rec.is_sealed ? 'NOT YET UNSEALED' : `UNSEALED ${rec.unsealed_date}`),
+    showDocDate ? span(`DOC ${rec.document_date}`, 'record__pill--doc-date') : null,
     span(rec.collection_id),
   ].filter(Boolean);
   meta.append(...metaPills);
@@ -235,7 +240,7 @@ function observeReveals() {
 // ─── Source filter toggles ────────────────────────────────────────────
 async function loadSources() {
   try {
-    const r = await fetch('/api/sources');
+    const r = await fetch('api/sources');
     if (!r.ok) return;
     const data = await r.json();
     state.sources = data.sources || [];
@@ -318,7 +323,7 @@ async function openDocument(rec) {
 
   let info;
   try {
-    const r = await fetch(`/api/document?id=${encodeURIComponent(rec.id)}`);
+    const r = await fetch(`api/document?id=${encodeURIComponent(rec.id)}`);
     info = r.ok ? await r.json() : null;
   } catch {
     info = null;
@@ -398,10 +403,13 @@ function buildFallbackCard(info) {
 
   const dl = document.createElement('dl');
   dl.className = 'viewer__meta';
+  const showDocDate =
+    info.document_date && info.document_date !== info.unsealed_date;
   const metaPairs = [
     info.is_sealed ? ['STATUS', 'SEALED — PROPOSED FOR DECLASSIFICATION, NOT YET RELEASED'] : null,
     ['AGENCY', info.agency],
     [info.is_sealed ? 'CANDIDATE LIST DATE' : 'UNSEALED', info.unsealed_date],
+    showDocDate ? ['DOCUMENT DATE', info.document_date] : null,
     ['COLLECTION', info.collection_id],
   ].filter(Boolean);
   for (const [k, v] of metaPairs) {

@@ -144,7 +144,7 @@ async function fetchCurated(q, limit, env, { includeSealed = false } = {}) {
   // that flips include_sealed=1.
   const sealedFilter = includeSealed ? '' : 'AND r.is_sealed = 0';
   const sql = `
-    SELECT r.id, r.title, r.agency, r.unsealed_date, r.collection_id,
+    SELECT r.id, r.title, r.agency, r.unsealed_date, r.document_date, r.collection_id,
            r.source_url, r.description, r.thumbnail_url, r.is_sealed,
            bm25(records_fts, 3.0, 1.0, 0.5) AS rank
     FROM records_fts
@@ -163,6 +163,7 @@ async function fetchCurated(q, limit, env, { includeSealed = false } = {}) {
       title: r.title,
       agency: r.agency,
       unsealed_date: r.unsealed_date,
+      document_date: r.document_date,
       collection_id: r.collection_id,
       source_url: r.source_url,
       description: r.description,

@@ -70,7 +70,7 @@ export const onRequestGet = async ({ request, env }) => {
 
   if (source === 'curated') {
     const row = await env.DB.prepare(
-      'SELECT id, title, source_url, agency, unsealed_date, collection_id, description, is_sealed FROM records WHERE id = ?1',
+      'SELECT id, title, source_url, agency, unsealed_date, document_date, collection_id, description, is_sealed FROM records WHERE id = ?1',
     ).bind(identifier).first();
     if (!row) return json({ error: 'not_found' }, 404);
     const probe = await probeFrameability(row.source_url);
@@ -80,6 +80,7 @@ export const onRequestGet = async ({ request, env }) => {
       title: row.title,
       agency: row.agency,
       unsealed_date: row.unsealed_date,
+      document_date: row.document_date,
       collection_id: row.collection_id,
       description: row.description,
       source_url: row.source_url,

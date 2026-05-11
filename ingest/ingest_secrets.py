@@ -97,6 +97,7 @@ class Record:
     thumbnail_url: str | None = None
     source_artifact_url: str | None = None  # provenance
     is_sealed: int = 0  # 1 = record is on a candidate / pre-release list, not actually unsealed
+    document_date: str | None = None  # doc's own creation date (FRUS: doc date; unsealed_date = volume pub date)
     content_hash: str = ""
 
     def __post_init__(self):
@@ -639,6 +640,59 @@ def _frus_parse_dateline(text: str) -> str:
     return f"{y:04d}-{mo:02d}-{day:02d}"
 
 
+_FRUS_PUB_DATE_FILE = ROOT / "ingest" / "frus_pub_dates.json"
+_FRUS_TEI_URL = "https://raw.githubusercontent.com/HistoryAtState/frus/master/volumes/{}.xml"
+_FRUS_PUB_DATE_RX = re.compile(
+    r'<date[^>]+type="publication-date"[^>]*>([^<]+)</date>', re.I
+)
+
+
+def _frus_load_pub_dates() -> dict[str, str]:
+    if _FRUS_PUB_DATE_FILE.exists():
+        try:
+            return json.loads(_FRUS_PUB_DATE_FILE.read_text("utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def _frus_save_pub_dates(d: dict[str, str]) -> None:
+    _FRUS_PUB_DATE_FILE.write_text(json.dumps(d, indent=2, sort_keys=True), "utf-8")
+
+
+def _frus_fetch_pub_date(vol_id: str, impersonate: str | None) -> str:
+    """Fetch volume publication date by Range-GETting the first 8KB of the
+    volume's TEI-XML from the HistoryAtState/frus GitHub mirror. No
+    crawl-delay needed (GitHub raw on Fastly)."""
+    url = _FRUS_TEI_URL.format(vol_id)
+    try:
+        if impersonate and _HAS_CFFI:
+            r = _cffi_requests.get(
+                url, impersonate=impersonate, timeout=TIMEOUT,
+                headers={"Range": "bytes=0-8191"},
+            )
+        else:
+            r = requests.get(
+                url, timeout=TIMEOUT,
+                headers={"user-agent": USER_AGENT, "From": FROM_HEADER,
+                         "Range": "bytes=0-8191"},
+            )
+        if r.status_code not in (200, 206):
+            return ""
+        text = r.text
+    except Exception:
+        return ""
+    m = _FRUS_PUB_DATE_RX.search(text)
+    if not m:
+        return ""
+    raw = m.group(1).strip()
+    # Normalize: "2006" → "2006-01-01"; "2006-04-15" → as-is.
+    if re.fullmatch(r"\d{4}", raw):
+        return f"{raw}-01-01"
+    iso = _to_iso_date(raw)
+    return iso or ""
+
+
 def parse_frus(group_cfg: dict, limit: int | None, *, fetch_opts) -> tuple[list[Record], list[str]]:
     import zipfile
     import io as _io
@@ -649,6 +703,23 @@ def parse_frus(group_cfg: dict, limit: int | None, *, fetch_opts) -> tuple[list[
     index_html = fetch(_FRUS_EBOOKS_INDEX, **fetch_opts(is_hub=True))
     epub_urls = sorted({m.group(0): m.group(1) for m in _FRUS_EPUB_RX.finditer(index_html)}.items())
     print(f"[frus] {len(epub_urls)} EPUB volumes discovered", file=sys.stderr)
+
+    # Prefetch volume publication dates from the FRUS GitHub mirror. This is
+    # cheap (~0.5s × 551 = ~5min) since GitHub raw is on Fastly with no
+    # crawl-delay. Persisted in ingest/frus_pub_dates.json so we only refetch
+    # for volumes we haven't seen.
+    pub_dates = _frus_load_pub_dates()
+    impersonate = group_cfg.get("impersonate")
+    needed = [vid for _u, vid in epub_urls if vid not in pub_dates]
+    if needed:
+        print(f"[frus] fetching publication dates for {len(needed)} new volumes...", file=sys.stderr)
+        for i, vid in enumerate(needed):
+            d = _frus_fetch_pub_date(vid, impersonate)
+            pub_dates[vid] = d
+            if (i + 1) % 50 == 0:
+                _frus_save_pub_dates(pub_dates)
+                print(f"  [frus] pub-dates {i + 1}/{len(needed)}", file=sys.stderr)
+        _frus_save_pub_dates(pub_dates)
 
     for epub_url, vol_id in epub_urls:
         artifacts.append(epub_url)
@@ -722,11 +793,17 @@ def parse_frus(group_cfg: dict, limit: int | None, *, fetch_opts) -> tuple[list[
                     [s for s in (doc_date_text, preview) if s]
                 )[:500]
 
+            vol_pub_date = pub_dates.get(vol_id, "")
             out.append(
                 Record(
                     title=title,
                     agency=group_cfg["agency"],
-                    unsealed_date=doc_date,
+                    # unsealed_date = volume publication date (when this
+                    # document became public). document_date = doc's own
+                    # creation date. Fall back to doc_date for unsealed_date
+                    # if the GitHub TEI mirror didn't have a pub date.
+                    unsealed_date=vol_pub_date or doc_date,
+                    document_date=doc_date or None,
                     collection_id=vol_title,
                     source_url=f"https://history.state.gov/historicaldocuments/{vol_id}/d{doc_num}",
                     description=description,
@@ -757,12 +834,12 @@ def emit_sql(group: str, records: list[Record]) -> Path:
                 "INSERT OR IGNORE INTO records "
                 "(title, agency, unsealed_date, collection_id, source_url, "
                 "description, thumbnail_url, source_artifact_url, is_sealed, "
-                "ingest_run_id, content_hash) "
+                "document_date, ingest_run_id, content_hash) "
                 "VALUES ("
                 f"{_q(r.title)}, {_q(r.agency)}, {_q(r.unsealed_date)}, {_q(r.collection_id)}, "
                 f"{_q(r.source_url)}, {_q(r.description)}, {_q(r.thumbnail_url)}, "
                 f"{_q(r.source_artifact_url)}, {int(r.is_sealed)}, "
-                f"{_q(RUN_ID)}, {_q(r.content_hash)}"
+                f"{_q(r.document_date)}, {_q(RUN_ID)}, {_q(r.content_hash)}"
                 ");\n"
             )
     return out_path

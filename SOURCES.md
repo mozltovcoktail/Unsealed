@@ -54,7 +54,7 @@ These are the next big rocks. Each is in scope, scrape-friendly, and adds 100k+ 
 
 | # | Source | Agency | Status | Access | Est. volume | Notes |
 |---|---|---|:---:|---|---:|---|
-| 2.1 | **CIA FOIA Reading Room (CREST)** | CIA | ⚫ | Akamai Bot Manager JS challenge | ~13M pages | Highest brand-fit. `cia.gov/readingroom`. Initial attempt 2026-05-11 hit `bm-verify` JS challenge that curl_cffi can't solve. Needs Playwright integration. Parser stub (`parse_cia_ufo`) retained. **NEXT after Playwright.** |
+| 2.1 | **CIA FOIA Reading Room (CREST)** — IA mirror | CIA | ✅ | IA `collection:cia-collection` (federated at query time) | 377,846 records | `cia` source in `/api/search`. Includes the entire CREST CIA-RDP* corpus (274,825 docs) + ~103k other CIA records. Zero D1 cost. The direct cia.gov scrape is still blocked by Akamai Bot Manager (parser stub `parse_cia_ufo` retained for a future Playwright pass to capture cia.gov-only Special Collections — JFK, Studies in Intelligence, etc.). |
 | 2.2 | **FBI Vault** | FBI | ⚫ | Akamai Bot Manager (suspected) | ~100k docs | `vault.fbi.gov`. 403s with curl_cffi+chrome impersonate. Same Playwright dependency as CREST. Parser stub (`parse_fbi_ufo`) retained. |
 | 2.3 | **State Virtual Reading Room** | State | 🔵 | Search API, paginated | ~100k docs | `foia.state.gov`. Hillary Clinton emails, Kissinger cables, ongoing FOIA releases. |
 | 2.4 | **DOE OpenNet** | DOE | 🔵 | Search API at `osti.gov/opennet` | ~500k records | DOE/AEC declassified nuclear-related records. |

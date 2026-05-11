@@ -31,6 +31,7 @@ export const onRequestGet = async ({ request, env }) => {
   if (!q) return json({ query: '', sources: [] });
 
   const all = [
+    { id: 'cia',     run: () => fetchCIACollection(q, limit) },
     { id: 'ia',      run: () => fetchInternetArchive(q, limit) },
     { id: 'ntrs',    run: () => fetchNTRS(q, limit) },
     { id: 'curated', run: () => fetchCurated(q, limit, env, { includeSealed, topics }) },
@@ -57,15 +58,60 @@ export const onRequestGet = async ({ request, env }) => {
 };
 
 const SOURCE_LABEL = {
+  cia:     'CIA — DECLASSIFIED RECORDS (CREST MIRROR)',
   ia:      'INTERNET ARCHIVE — NATIONAL SECURITY ARCHIVE',
   ntrs:    'NASA NTRS — TECHNICAL REPORTS',
-  curated: 'CURATED — AARO / DOW / EDITORIAL',
+  curated: 'CURATED — AARO / FRUS / EDITORIAL',
 };
 
-// ─── Internet Archive (NSA collection) ─────────────────────────────────
+// ─── CIA (IA cia-collection mirror — CREST + adjacent CIA records) ─────
+// cia.gov/readingroom is gated by Akamai Bot Manager and unscrapeable
+// without a real headless browser. The Internet Archive maintains a full
+// public mirror as `collection:cia-collection` (377,846 items, including
+// the entire CREST CIA-RDP* corpus of 274,825 documents). We federate
+// against IA — zero D1 cost, always fresh, and ethical (IA's terms
+// explicitly invite this use). cia-collection is a strict subset of
+// nationalsecurityarchive, so the `ia` source query excludes it to avoid
+// duplicate results.
+async function fetchCIACollection(q, limit) {
+  const params = new URLSearchParams();
+  params.set('q', `collection:cia-collection ${q}`);
+  ['identifier', 'title', 'date', 'creator', 'description'].forEach((f) =>
+    params.append('fl[]', f),
+  );
+  params.set('rows', String(limit));
+  params.set('output', 'json');
+
+  const r = await fetch(`https://archive.org/advancedsearch.php?${params}`, {
+    headers: { 'user-agent': 'UNSEALED/0.1 (+federation)' },
+    cf: { cacheTtl: 60, cacheEverything: true },
+  });
+  if (!r.ok) throw new Error(`cia ${r.status}`);
+  const data = await r.json();
+  const docs = data?.response?.docs || [];
+
+  return {
+    id: 'cia',
+    name: SOURCE_LABEL.cia,
+    total: data?.response?.numFound ?? null,
+    results: docs.map((d) => ({
+      id: `ia:${d.identifier}`, // reuse ia: prefix so /api/document already handles it
+      title: pickFirst(d.title) || d.identifier,
+      agency: 'CIA',
+      unsealed_date: pickFirst(d.date)?.slice(0, 10) || null,
+      collection_id: 'CIA Declassified Records',
+      source_url: `https://archive.org/details/${encodeURIComponent(d.identifier)}`,
+      description: pickFirst(d.description) || null,
+      thumbnail_url: `https://archive.org/services/img/${encodeURIComponent(d.identifier)}`,
+    })),
+  };
+}
+
+// ─── Internet Archive (NSA collection minus cia-collection) ────────────
 async function fetchInternetArchive(q, limit) {
   const params = new URLSearchParams();
-  params.set('q', `collection:nationalsecurityarchive ${q}`);
+  // Exclude cia-collection — it gets its own dedicated source above.
+  params.set('q', `collection:nationalsecurityarchive AND NOT collection:cia-collection ${q}`);
   ['identifier', 'title', 'date', 'creator', 'description'].forEach((f) =>
     params.append('fl[]', f),
   );

@@ -5,6 +5,8 @@ dist/
 .dev.vars
 ingest/cache/
 db/ingest_*.sql
+ingest/seen_hashes.json
 *.log
 .env
 .env.*
+.claude/

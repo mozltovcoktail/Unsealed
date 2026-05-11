@@ -44,6 +44,7 @@ Brand strap (`index.html`) currently reads "RECENTLY DECLASSIFIED" — outdated 
 | 1.3 | AARO UAP cases & reports | AARO | ✅ | HTML scrape (curl_cffi) | `aaro` group. 11 records live as of 2026-05-10. Akamai TLS-fingerprinting required curl_cffi escalation. |
 | 1.4 | NASA NTRS | NASA | ✅ | REST API (federated at query time) | `/api/search` federates against `ntrs.nasa.gov/api`. Not ingested into D1 — live federation. |
 | 1.5 | Internet Archive — National Security Archive collection | (IA mirror of CIA/NSA/etc.) | ✅ | IA advanced-search API (federated) | ~2.4M docs. Federated, not ingested. |
+| 1.6 | **State FRUS** (1861–1989+) | State | ✅ | Bulk EPUB downloads + GitHub TEI mirror for pub dates | `frus` group. **313,257 records live in D1** as of 2026-05-11 (548 of 551 volumes; 3 EPUBs still 30s-timeout, low priority). |
 
 ## 2. Federal — high-priority queue
 
@@ -51,15 +52,15 @@ These are the next big rocks. Each is in scope, scrape-friendly, and adds 100k+ 
 
 | # | Source | Agency | Status | Access | Est. volume | Notes |
 |---|---|---|:---:|---|---:|---|
-| 2.1 | **govinfo.gov bulk data** | GPO | 🔵 | Bulk-data REST API | ≫1M | Master index of published federal docs — Federal Register, CFR, Congressional Record, GAO, Presidential papers. **Decision needed:** is this in-brand? (See open decisions.) |
-| 2.2 | **CIA FOIA Reading Room (CREST)** | CIA | 🔵 | HTML scrape + search JSON | ~13M pages | Highest brand-fit. `cia.gov/readingroom`. Robots-friendly, has its own search backend. |
-| 2.3 | **FBI Vault** | FBI | 🔵 | HTML scrape (Drupal) | ~100k docs | `vault.fbi.gov`. Topic-organized lists, predictable URLs. |
-| 2.4 | **State FRUS** (Foreign Relations of the U.S.) | State | 🔵 | Full-text HTML + EPUB bulk | ~500k pages | `history.state.gov/historicaldocuments`. Gold-standard declassified diplomatic record, 1861–present. Bulk downloads available. |
-| 2.5 | **State Virtual Reading Room** | State | 🔵 | Search API, paginated | ~100k docs | `foia.state.gov`. Hillary Clinton emails, Kissinger cables, ongoing FOIA releases. |
-| 2.6 | **DOE OpenNet** | DOE | 🔵 | Search API at `osti.gov/opennet` | ~500k records | DOE/AEC declassified nuclear-related records. |
-| 2.7 | **NSA Declassified Documents** | NSA | 🔵 | HTML scrape | small (<10k) | `nsa.gov/news-features/declassified-documents`. High-prestige releases (VENONA, BOURBON, etc.). |
-| 2.8 | **JFK Records Collection** | NARA | 🔵 | NARA-hosted catalog + bulk lists | ~5M pages | `archives.gov/research/jfk`. Mostly digitized. Could fold into NARA Catalog group. |
-| 2.9 | **ODNI — IC on the Record** | ODNI | 🔵 | HTML scrape | <5k | Post-Snowden surveillance declassifications. `dni.gov` + `icontherecord.tumblr.com`. |
+| 2.1 | **CIA FOIA Reading Room (CREST)** | CIA | 🔵 | HTML scrape + search JSON | ~13M pages | Highest brand-fit. `cia.gov/readingroom`. Robots-friendly, has its own search backend. **NEXT.** |
+| 2.2 | **FBI Vault** | FBI | 🔵 | HTML scrape (Drupal) | ~100k docs | `vault.fbi.gov`. Topic-organized lists, predictable URLs. |
+| 2.3 | **State Virtual Reading Room** | State | 🔵 | Search API, paginated | ~100k docs | `foia.state.gov`. Hillary Clinton emails, Kissinger cables, ongoing FOIA releases. |
+| 2.4 | **DOE OpenNet** | DOE | 🔵 | Search API at `osti.gov/opennet` | ~500k records | DOE/AEC declassified nuclear-related records. |
+| 2.5 | **NSA Declassified Documents** | NSA | 🔵 | HTML scrape | small (<10k) | `nsa.gov/news-features/declassified-documents`. High-prestige releases (VENONA, BOURBON, etc.). |
+| 2.6 | **JFK Records Collection** | NARA | 🔵 | NARA-hosted catalog + bulk lists | ~5M pages | `archives.gov/research/jfk`. Mostly digitized. Could fold into NARA Catalog group. |
+| 2.7 | **ODNI — IC on the Record** | ODNI | 🔵 | HTML scrape | <5k | Post-Snowden surveillance declassifications. `dni.gov` + `icontherecord.tumblr.com`. |
+| 2.8 | **DTIC** (Defense Technical Information Center) | DoD | 🔵 | Public-access search API at `discover.dtic.mil` | ~1M+ records | DoD's central technical-report repository. Many were classified SECRET/CONFIDENTIAL when written, declassified after 25 years. Likely the largest single declassified corpus we'd touch. |
+| 2.9 | **Presidential Libraries** (9 institutions) | NARA | 🔵 | HTML scrape per library | varies — high decision-density per record | JFK/LBJ/Nixon/Ford/Carter/Reagan/GHWB/Clinton/GWB. Each has its own FOIA reading room with declassified NSC memos, briefings, Situation Room cables. Higher cultural value/record than bulk NDC release lists. |
 
 ## 3. Federal — specialty / smaller
 
@@ -76,12 +77,19 @@ Each adds <50k rows. Worth doing but lower priority than §2.
 | 3.7 | NGA FOIA | NGA | 🔵 | HTML scrape | `nga.mil/foia` |
 | 3.8 | Department of War / OSD UAP records | DoW | 🟡 | URL TBD | `ingest/sources.json::dow_uap.urls` empty until 2026 release URL provided. |
 | 3.9 | Wilson Center Digital Archive | (academic, but hosts gov-released material) | 🔵 | API | Cold War international docs. ToS review needed before scrape. |
+| 3.10 | **NSA Cryptologic History** | NSA | 🔵 | HTML scrape | `nsa.gov/about/cryptologic-heritage/historical-figures-publications/`. Declassified Cold War SIGINT histories (TICOM, VENONA studies, etc.). Small but high-prestige. |
+| 3.11 | **CIA Center for the Study of Intelligence (CSI)** | CIA | 🔵 | HTML scrape | `cia.gov/resources/csi/studies-in-intelligence/`. Declassified analytic histories, officer biographies. |
+| 3.12 | **Naval History and Heritage Command** | Navy | 🔵 | HTML scrape | `history.navy.mil`. Declassified WWII/Cold War naval operations. |
+| 3.13 | **Air Force Historical Research Agency (AFHRA)** | USAF | 🔵 | HTML scrape | `afhra.af.mil`. Declassified Air Force operational histories. |
+| 3.14 | **Army Center of Military History** | Army | 🔵 | HTML scrape | `history.army.mil`. Declassified Vietnam-era / Cold War operational histories. |
+| 3.15 | **ISCAP / PIDB decisions** | NARA / ISCAP | 🔵 | HTML scrape | `archives.gov/declassification/iscap` + `pidb`. Records released after appeals from declassification denials. Small but unique. |
 
 ## 4. Born-unclassified federal corpus — EXCLUDED (decided 2026-05-10)
 
 These were public-by-default from day one. UNSEALED's brand is records that *were* classified, so this whole tier is out:
 
-- Federal Register, CFR, Congressional Record, GAO reports, USGS, NIST, Presidential Public Papers, govinfo.gov as a whole.
+- govinfo.gov (Federal Register, CFR, Congressional Record, GAO, USGS, NIST, Presidential Public Papers, etc.)
+- Public agency press releases / annual reports / public-affairs materials
 
 (govinfo's bulk API would still be useful as a *cross-reference* — e.g., looking up the original classification authority for an EO cited in a declassified doc — but not as an ingest target.)
 
@@ -105,6 +113,8 @@ These were public-by-default from day one. UNSEALED's brand is records that *wer
 - **2026-05-10 — Brand scope:** previously-classified only, no time bound (§1+§2+§3 in, §4 out, CRS moved to §5). Strap text in `index.html` likely wants a rewrite to drop "RECENTLY" — TBD.
 - **2026-05-10 — Parser order:** **State FRUS → CIA CREST → FBI Vault → DOE OpenNet → NSA Declass → ODNI**, then §3 long tail.
 - **2026-05-10 — Aggregators:** keep §5 excluded. No outreach to GWU NSArchive / MuckRock / Black Vault for v1.
+- **2026-05-11 — Additions to queue:** DTIC and Presidential Libraries added to §2, NSA Cryptologic History / CIA CSI / Naval History / AFHRA / Army CMH / ISCAP / PIDB added to §3. CIA CREST remains next per brand-fit priority.
+- **2026-05-11 — Steady-state quota fix:** ingester loads `ingest/seen_hashes.json` (set of content_hashes already in D1, refreshed once per run from `SELECT content_hash FROM records`) and skips re-emitting them. Keeps weekly re-ingest inside D1 Workers Free 100k writes/day even as the corpus grows.
 
 ---
 

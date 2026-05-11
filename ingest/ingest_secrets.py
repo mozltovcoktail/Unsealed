@@ -68,6 +68,7 @@ OUT_DIR = ROOT / "db"
 CACHE_DIR = ROOT / "ingest" / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 SEEN_ARTIFACTS_FILE = ROOT / "ingest" / "seen_artifacts.json"
+SEEN_HASHES_FILE = ROOT / "ingest" / "seen_hashes.json"
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -194,6 +195,48 @@ def load_seen_artifacts() -> dict[str, list[str]]:
 
 def save_seen_artifacts(seen: dict[str, list[str]]) -> None:
     SEEN_ARTIFACTS_FILE.write_text(json.dumps(seen, indent=2, sort_keys=True), "utf-8")
+
+
+def load_seen_hashes() -> set[str]:
+    """Content-hashes already in remote D1. Used to skip re-emitting rows that
+    would otherwise INSERT OR IGNORE — those still count against D1's
+    100k-writes/day free-tier quota even when they're no-ops.
+
+    Populated by the workflow via:
+      wrangler d1 execute unsealed --remote --json \\
+        --command 'SELECT content_hash FROM records' > ingest/seen_hashes.json
+    """
+    if not SEEN_HASHES_FILE.exists():
+        return set()
+    try:
+        raw = json.loads(SEEN_HASHES_FILE.read_text("utf-8"))
+    except Exception:
+        return set()
+    # Accept several shapes:
+    #   ["sha1", "sha1", ...]                                  bare list
+    #   [{"content_hash": "sha1"}, ...]                        rows directly
+    #   [{"results": [{"content_hash": "sha1"}, ...], ...}]    wrangler --json
+    #   {"results": [...]}                                     single envelope
+    def _extract_rows(node):
+        if isinstance(node, list):
+            return node
+        if isinstance(node, dict) and isinstance(node.get("results"), list):
+            return node["results"]
+        return []
+
+    rows = _extract_rows(raw)
+    if rows and isinstance(rows[0], dict) and "results" in rows[0]:
+        # Wrangler wraps the actual rows one level deeper.
+        rows = _extract_rows(rows[0])
+    out: set[str] = set()
+    for r in rows:
+        if isinstance(r, str):
+            out.add(r)
+        elif isinstance(r, dict):
+            h = r.get("content_hash")
+            if h:
+                out.add(h)
+    return out
 
 
 # ─── NARA NDC parser ──────────────────────────────────────────────
@@ -825,11 +868,20 @@ PARSERS = {
 
 
 # ─── SQL emission ─────────────────────────────────────────────────
-def emit_sql(group: str, records: list[Record]) -> Path:
+def emit_sql(group: str, records: list[Record], seen_hashes: set[str] | None = None) -> Path:
     out_path = OUT_DIR / f"ingest_{group}.sql"
+    # Filter out records whose content_hash is already in D1. Those would
+    # INSERT OR IGNORE to no-ops, but each one still counts against the
+    # 100k/day write quota on D1's Workers Free tier.
+    seen_hashes = seen_hashes or set()
+    fresh = [r for r in records if r.content_hash not in seen_hashes]
+    skipped = len(records) - len(fresh)
     with out_path.open("w", encoding="utf-8") as f:
-        f.write(f"-- UNSEALED ingest — {group} — {len(records)} records — run {RUN_ID}\n")
-        for r in records:
+        f.write(
+            f"-- UNSEALED ingest — {group} — {len(fresh)} new records "
+            f"({skipped} already in D1, skipped) — run {RUN_ID}\n"
+        )
+        for r in fresh:
             f.write(
                 "INSERT OR IGNORE INTO records "
                 "(title, agency, unsealed_date, collection_id, source_url, "
@@ -877,6 +929,9 @@ def main() -> int:
     groups = [args.group] if args.group else [g for g in cfg if not g.startswith("_")]
 
     seen_artifacts = load_seen_artifacts()
+    seen_hashes = load_seen_hashes()
+    if seen_hashes:
+        print(f"loaded {len(seen_hashes)} seen content_hashes (skip-already-in-D1 mode)", file=sys.stderr)
     report: dict = {
         "run_id": RUN_ID,
         "groups": {},
@@ -925,19 +980,29 @@ def main() -> int:
             print(f"[{g}] {len(new)} NEW artifacts since last run", file=sys.stderr)
             report["new_artifacts"][g] = new
 
-        print(f"[{g}] {len(recs)} records, {len(artifacts)} artifacts", file=sys.stderr)
+        # Filter against seen_hashes so the report + emitted SQL reflect
+        # only records that aren't already in D1.
+        fresh_recs = [r for r in recs if r.content_hash not in seen_hashes]
+        already_in_d1 = len(recs) - len(fresh_recs)
+        print(
+            f"[{g}] {len(recs)} parsed, {len(fresh_recs)} new ({already_in_d1} already in D1), "
+            f"{len(artifacts)} artifacts",
+            file=sys.stderr,
+        )
         report["groups"][g] = {
             "status": "ok",
-            "records": len(recs),
+            "records": len(fresh_recs),
+            "records_parsed": len(recs),
+            "records_already_in_d1": already_in_d1,
             "artifacts": len(artifacts),
             "new_artifacts": len(new),
         }
-        report["total_records"] += len(recs)
+        report["total_records"] += len(fresh_recs)
         if args.dry_run:
-            for r in recs[:5]:
+            for r in fresh_recs[:5]:
                 print(json.dumps(asdict(r), indent=2))
             continue
-        path = emit_sql(g, recs)
+        path = emit_sql(g, recs, seen_hashes=seen_hashes)
         print(f"[{g}] wrote {path.relative_to(ROOT)}", file=sys.stderr)
 
     if not args.dry_run:

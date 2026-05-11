@@ -117,8 +117,10 @@ class Record:
 
 # ─── HTTP with on-disk cache ──────────────────────────────────────
 def _cache_paths(url: str, binary: bool) -> tuple[Path, Path]:
+    # binary=True fetches are never written to disk (Rule 5 — no document storage),
+    # so the .bin suffix is vestigial; only .txt paths are actually used.
     key = re.sub(r"[^a-zA-Z0-9]+", "_", url)[:160]
-    suffix = ".bin" if binary else ".txt"
+    suffix = ".txt"  # .bin intentionally unused — binaries stay in memory only
     return CACHE_DIR / f"{key}{suffix}", CACHE_DIR / f"{key}.meta.json"
 
 
@@ -214,12 +216,15 @@ def fetch(
     impersonate: str | None = None,
     crawl_delay_sec: int = 0,
 ) -> bytes | str:
+    # Binary fetches are never cached to disk — CONTEXT.md Rule 5 (discovery
+    # layer, not storage repository). Callers receive bytes in memory only;
+    # no .bin file is ever written to ingest/cache/ or anywhere else.
     cache, meta = _cache_paths(url, binary)
-    if not no_cache and cache.exists():
+    if not binary and not no_cache and cache.exists():
         age = time.time() - cache.stat().st_mtime
         max_age = ttl_sec if ttl_sec is not None else DEFAULT_HUB_TTL_SEC
         if max_age <= 0 or age < max_age:
-            return cache.read_bytes() if binary else cache.read_text("utf-8", "replace")
+            return cache.read_text("utf-8", "replace")
     # robots.txt is a hard gate (CONTEXT.md rule #2). Refuse before any
     # network call if the path is Disallow'd for User-agent: *.
     allowed, rule = _robots_allowed(url)
@@ -255,9 +260,9 @@ def fetch(
         r = requests.get(url, headers=headers, timeout=TIMEOUT)
     r.raise_for_status()
     if binary:
-        cache.write_bytes(r.content)
-    else:
-        cache.write_text(r.text, "utf-8")
+        # Never persist binary content — return in memory only (Rule 5).
+        return r.content
+    cache.write_text(r.text, "utf-8")
     meta.write_text(
         json.dumps(
             {
@@ -270,7 +275,7 @@ def fetch(
         ),
         "utf-8",
     )
-    return r.content if binary else r.text
+    return r.text
 
 
 # ─── Hub-diff: track artifact URLs across runs ────────────────────
